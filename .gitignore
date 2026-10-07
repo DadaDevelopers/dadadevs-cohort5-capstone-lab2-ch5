@@ -1,0 +1,10 @@
+node_modules/
+.env
+coverage/
+dist/
+*.log
+/generated/prisma
+.claude/
+.agents/
+skills-lock.json
+generated/
