@@ -6,12 +6,19 @@ const {
   requireAuthorizedSigner,
 } = require("../middleware/community-authorization.middleware");
 const { authLimiter } = require("../middleware/auth-rate-limit");
+const controller = require("../controllers/community.controller");
 
 // These temporary endpoints inspect existing permissions without changing membership.
 const router = express.Router();
 
 // Keep the same request limit these test routes had under /auth.
 router.use(authLimiter);
+
+router.post("/", authenticate, controller.create);
+router.post("/join", authenticate, controller.join);
+router.get("/", authenticate, controller.list);
+router.get("/:identifier", authenticate, controller.get);
+router.get("/:communityId/members", authenticate, controller.members);
 
 // A valid access token and current membership are both required.
 router.get("/:communityId/test/member", authenticate, requireCommunityMembership, (req, res) => {

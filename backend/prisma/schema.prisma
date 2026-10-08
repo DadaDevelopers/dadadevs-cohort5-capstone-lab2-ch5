@@ -25,7 +25,11 @@ model User {
 
 model Community {
   id          Int                   @id @default(autoincrement())
+  // Case-insensitive uniqueness is enforced by Community_name_normalized_key
+  // in the SQL migration; Prisma cannot model expression indexes here.
   name        String
+  description String
+  joinCode    String                @unique
   createdAt   DateTime              @default(now())
   updatedAt   DateTime              @updatedAt
   memberships CommunityMembership[]

@@ -38,6 +38,17 @@ const communityTestResponses = (message) => ({
   429: errorResponse("Rate limited"),
 });
 
+const communitySecurity = [{ bearerAuth: [] }];
+const communityErrors = {
+  400: errorResponse("Invalid input"),
+  401: errorResponse("Unauthorized"),
+  403: errorResponse("Not a member"),
+  404: errorResponse("Community not found"),
+  409: errorResponse("Membership conflict"),
+  429: errorResponse("Rate limited"),
+  500: errorResponse("Internal server error"),
+};
+
 module.exports = {
   openapi: "3.0.3",
   info: {
@@ -45,6 +56,7 @@ module.exports = {
     description: "Authentication identifies a user globally. Authorization checks that user's current membership or signer authority in the requested community.",
   },
   servers: [{ url: "/" }],
+  tags: [{ name: "Communities", description: "Community creation, membership and discovery" }],
   components: {
     securitySchemes: {
       bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" },
@@ -65,6 +77,60 @@ module.exports = {
     },
   },
   paths: {
+    "/communities": {
+      post: {
+        tags: ["Communities"], summary: "Create a community", security: communitySecurity,
+        description: "Names are trimmed and unique regardless of casing or surrounding whitespace.",
+        requestBody: jsonBody({ type: "object", required: ["name", "description"], properties: { name: { type: "string", minLength: 1, maxLength: 100 }, description: { type: "string", minLength: 1, maxLength: 500 } } }, { name: "Dada Community Fund", description: "A community savings group for shared Bitcoin contributions." }),
+        responses: {
+          201: { description: "Community created; creator is admin", content: { "application/json": { example: { community: { id: 1, name: "Dada Community Fund", description: "A community savings group for shared Bitcoin contributions.", joinCode: "DADA-A1B2C3D4E5F6", role: "COMMUNITY_ADMIN", createdAt: "2026-10-08T10:00:00.000Z" } } } } },
+          400: communityErrors[400], 401: communityErrors[401],
+          409: { description: "Community name already exists", content: { "application/json": { example: { error: "Community name already exists" } } } },
+          429: communityErrors[429], 500: communityErrors[500],
+        },
+      },
+      get: {
+        tags: ["Communities"], summary: "List my communities", security: communitySecurity,
+        responses: {
+          200: { description: "Only current memberships; join codes are omitted", content: { "application/json": { example: { communities: [{ id: 1, name: "Dada Community Fund", description: "A community savings group for shared Bitcoin contributions.", role: "COMMUNITY_ADMIN" }] } } } },
+          401: communityErrors[401], 429: communityErrors[429], 500: communityErrors[500],
+        },
+      },
+    },
+    "/communities/join": {
+      post: {
+        tags: ["Communities"], summary: "Join by code", security: communitySecurity,
+        requestBody: jsonBody({ type: "object", required: ["joinCode"], properties: { joinCode: { type: "string" } } }, { joinCode: "DADA-A1B2C3D4E5F6" }),
+        responses: {
+          201: { description: "Joined as member", content: { "application/json": { example: { community: { id: 1, name: "Dada Community Fund", role: "COMMUNITY_MEMBER" } } } } },
+          400: communityErrors[400], 401: communityErrors[401], 404: communityErrors[404], 409: communityErrors[409], 429: communityErrors[429], 500: communityErrors[500],
+        },
+      },
+    },
+    "/communities/{identifier}": {
+      get: {
+        tags: ["Communities"], summary: "Get a community I belong to by ID or name", security: communitySecurity,
+        description: "A numeric identifier is treated as an ID; other values are URL-decoded, trimmed, and matched as names without regard to case. Use by=name for a numeric-only community name. Membership controls access and only admins receive joinCode.",
+        parameters: [
+          { name: "identifier", in: "path", required: true, schema: { type: "string" }, example: "Dada Community Fund" },
+          { name: "by", in: "query", required: false, schema: { type: "string", enum: ["id", "name"] }, description: "Optional lookup type; use name for numeric-only names" },
+        ],
+        responses: {
+          200: { description: "Community details; joinCode is included only for admins", content: { "application/json": { example: { community: { id: 1, name: "Dada Community Fund", description: "A community savings group for shared Bitcoin contributions.", createdAt: "2026-10-08T10:00:00.000Z", role: "COMMUNITY_ADMIN", joinCode: "DADA-A1B2C3D4E5F6" } } } } },
+          400: communityErrors[400], 401: communityErrors[401], 403: communityErrors[403], 404: communityErrors[404], 429: communityErrors[429], 500: communityErrors[500],
+        },
+      },
+    },
+    "/communities/{communityId}/members": {
+      get: {
+        tags: ["Communities"], summary: "List community members", security: communitySecurity,
+        parameters: [communityIdParameter],
+        responses: {
+          200: { description: "Safe member profiles and roles", content: { "application/json": { example: { members: [{ id: 1, firstName: "Ada", lastName: "Lovelace", email: "ada@example.com", role: "COMMUNITY_ADMIN" }] } } } },
+          400: communityErrors[400], 401: communityErrors[401], 403: communityErrors[403], 404: communityErrors[404], 429: communityErrors[429], 500: communityErrors[500],
+        },
+      },
+    },
     // This endpoint reports database reachability as well as API health.
     "/health": {
       get: {
