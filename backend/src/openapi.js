@@ -167,6 +167,40 @@ module.exports = {
         },
       },
     },
+    "/communities/{communityId}/signers": {
+      post: {
+        tags: ["Communities"], summary: "Select an authorized signer", security: communitySecurity,
+        description: "Only a current community admin may select an existing community member. Signer authority is separate from membership role.",
+        parameters: [communityIdParameter],
+        requestBody: jsonBody({ type: "object", required: ["userId"], properties: { userId: { type: "integer", minimum: 1 } } }, { userId: 2 }),
+        responses: {
+          201: { description: "Signer selected", content: { "application/json": { example: { signer: { signerId: 1, userId: 2, firstName: "Ada", lastName: "Lovelace", email: "ada@example.com", membershipRole: "COMMUNITY_MEMBER", isAuthorizedSigner: true, createdAt: "2026-10-08T10:00:00.000Z" } } } } },
+          400: communityErrors[400], 401: communityErrors[401], 403: communityErrors[403], 404: communityErrors[404],
+          409: errorResponse("Target is not a member or is already a signer"), 429: communityErrors[429], 500: communityErrors[500],
+        },
+      },
+      get: {
+        tags: ["Communities"], summary: "List authorized signers", security: communitySecurity,
+        description: "Any current member of the community may view its signers. Only safe user fields are returned.",
+        parameters: [communityIdParameter],
+        responses: {
+          200: { description: "Community signers", content: { "application/json": { example: { signers: [{ signerId: 1, userId: 2, firstName: "Ada", lastName: "Lovelace", email: "ada@example.com", membershipRole: "COMMUNITY_MEMBER", isAuthorizedSigner: true, createdAt: "2026-10-08T10:00:00.000Z" }] } } } },
+          400: communityErrors[400], 401: communityErrors[401], 403: communityErrors[403], 404: communityErrors[404], 429: communityErrors[429], 500: communityErrors[500],
+        },
+      },
+    },
+    "/communities/{communityId}/signers/{userId}": {
+      delete: {
+        tags: ["Communities"], summary: "Remove an authorized signer", security: communitySecurity,
+        description: "Only a current community admin may remove signer authority. Membership remains. Once wallet creation is implemented, signer removal must be locked after wallet creation.",
+        parameters: [communityIdParameter, { name: "userId", in: "path", required: true, schema: { type: "integer", minimum: 1 }, example: 2 }],
+        responses: {
+          204: { description: "Signer authority removed" },
+          400: communityErrors[400], 401: communityErrors[401], 403: communityErrors[403], 404: errorResponse("Community, membership, or signer not found"),
+          409: errorResponse("Signer set is locked after wallet creation (future rule)"), 429: communityErrors[429], 500: communityErrors[500],
+        },
+      },
+    },
     // This endpoint reports database reachability as well as API health.
     "/health": {
       get: {

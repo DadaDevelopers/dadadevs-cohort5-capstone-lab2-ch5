@@ -34,4 +34,8 @@ function validateMemberEmail(value) {
   return email.length <= 254 && isValidEmail(email) ? email : null;
 }
 
-module.exports = { validateName, validateDescription, validateJoinCode, parseCommunityId, validateMemberEmail, MAX_NAME_LENGTH, MAX_DESCRIPTION_LENGTH };
+function validateUserIdBody(value) {
+  return Number.isInteger(value) && value > 0 && value <= 2147483647 ? value : null;
+}
+
+module.exports = { validateName, validateDescription, validateJoinCode, parseCommunityId, validateMemberEmail, validateUserIdBody, MAX_NAME_LENGTH, MAX_DESCRIPTION_LENGTH };
