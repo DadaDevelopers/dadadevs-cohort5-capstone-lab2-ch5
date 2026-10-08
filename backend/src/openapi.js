@@ -192,12 +192,12 @@ module.exports = {
     "/communities/{communityId}/signers/{userId}": {
       delete: {
         tags: ["Communities"], summary: "Remove an authorized signer", security: communitySecurity,
-        description: "Only a current community admin may remove signer authority. Membership remains. Once wallet creation is implemented, signer removal must be locked after wallet creation.",
+        description: "Only a current community admin may remove signer authority. Membership remains. Removal is rejected if the remaining signer count would fall below the configured threshold. Once wallet creation is implemented, signer removal must also be locked after wallet creation.",
         parameters: [communityIdParameter, { name: "userId", in: "path", required: true, schema: { type: "integer", minimum: 1 }, example: 2 }],
         responses: {
           204: { description: "Signer authority removed" },
           400: communityErrors[400], 401: communityErrors[401], 403: communityErrors[403], 404: errorResponse("Community, membership, or signer not found"),
-          409: errorResponse("Signer set is locked after wallet creation (future rule)"), 429: communityErrors[429], 500: communityErrors[500],
+          409: errorResponse("Removal would invalidate the threshold; wallet-stage lock is a future rule"), 429: communityErrors[429], 500: communityErrors[500],
         },
       },
     },
@@ -224,6 +224,33 @@ module.exports = {
           } } } },
           400: communityErrors[400], 401: communityErrors[401], 403: communityErrors[403],
           404: communityErrors[404], 429: communityErrors[429], 500: communityErrors[500],
+        },
+      },
+    },
+    "/communities/{communityId}/signing-threshold": {
+      put: {
+        tags: ["Communities"], summary: "Set the multisig signing threshold", security: communitySecurity,
+        description: "Only a current COMMUNITY_ADMIN may set M. With 3 AuthorizedSigners and requiredSignatures 2, the future wallet would be 2-of-3. At least two signers are required; M must not exceed N. The threshold remains editable until wallet creation is implemented.",
+        parameters: [communityIdParameter],
+        requestBody: jsonBody({ type: "object", required: ["requiredSignatures"], properties: { requiredSignatures: { type: "integer", minimum: 2 } } }, { requiredSignatures: 2 }),
+        responses: {
+          200: { description: "Threshold configured", content: { "application/json": { example: { requiredSignatures: 2, authorizedSignerCount: 3 } } } },
+          400: communityErrors[400], 401: communityErrors[401], 403: communityErrors[403], 404: communityErrors[404],
+          409: errorResponse("Fewer than two signers, threshold exceeds signer count, or future wallet lock"),
+          429: communityErrors[429], 500: communityErrors[500],
+        },
+      },
+      get: {
+        tags: ["Communities"], summary: "Get the signing threshold and signer count", security: communitySecurity,
+        description: "Any current member may view M and N. An unconfigured threshold is null; signer count can still be zero. Signer removal is rejected if it would make M exceed the remaining N.",
+        parameters: [communityIdParameter],
+        responses: {
+          200: { description: "Current configuration", content: { "application/json": { examples: {
+            configured: { value: { requiredSignatures: 2, authorizedSignerCount: 3 } },
+            unconfigured: { value: { requiredSignatures: null, authorizedSignerCount: 3 } },
+          } } } },
+          400: communityErrors[400], 401: communityErrors[401], 403: communityErrors[403], 404: communityErrors[404],
+          429: communityErrors[429], 500: communityErrors[500],
         },
       },
     },

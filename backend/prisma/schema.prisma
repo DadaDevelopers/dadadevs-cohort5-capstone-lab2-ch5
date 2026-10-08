@@ -30,6 +30,7 @@ model Community {
   name        String
   description String
   joinCode    String                @unique
+  requiredSignatures Int?
   createdAt   DateTime              @default(now())
   updatedAt   DateTime              @updatedAt
   memberships CommunityMembership[]

@@ -9,7 +9,7 @@ process.env.JWT_SECRET = "community-signers-test-secret";
 const users = [1, 2, 3, 4].map((id) => ({
   id, firstName: `User${id}`, lastName: "Test", email: `user${id}@example.com`, passwordHash: "secret",
 }));
-const communities = [{ id: 1 }, { id: 2 }];
+const communities = [{ id: 1, requiredSignatures: null }, { id: 2, requiredSignatures: null }];
 const memberships = [
   { id: 10, userId: 1, communityId: 1, role: "COMMUNITY_ADMIN" },
   { id: 11, userId: 2, communityId: 1, role: "COMMUNITY_MEMBER" },
@@ -23,6 +23,11 @@ let forceUniqueRace = false;
 const prisma = {
   community: {
     async findUnique({ where }) { return communities.find((item) => item.id === where.id) || null; },
+    async update({ where, data }) {
+      const community = communities.find((item) => item.id === where.id);
+      Object.assign(community, data);
+      return community;
+    },
   },
   communityMembership: {
     async findUnique({ where }) {
@@ -37,6 +42,10 @@ const prisma = {
     },
   },
   authorizedSigner: {
+    async count({ where }) {
+      return signers.filter((signer) => memberships.some((member) =>
+        member.id === signer.membershipId && member.communityId === where.membership.is.communityId)).length;
+    },
     async create({ data }) {
       if (forceUniqueRace) { forceUniqueRace = false; throw { code: "P2002" }; }
       if (signers.some((signer) => signer.membershipId === data.membershipId)) throw { code: "P2002" };
@@ -185,15 +194,56 @@ test("authorized signers are separate from community roles and scoped to members
     assert.equal((await request("GET", path, 1)).body.signers.length, 0);
     assert.equal((await request("GET", "/communities/2/signers", 1)).body.signers.length, 1);
 
+    const thresholdPath = "/communities/1/signing-threshold";
+    assert.deepEqual(await request("GET", thresholdPath, 2), {
+      status: 200, body: { requiredSignatures: null, authorizedSignerCount: 0 },
+    });
+    assert.equal((await request("GET", thresholdPath, null)).status, 401);
+    assert.equal((await request("PUT", thresholdPath, null, { requiredSignatures: 2 })).status, 401);
+    assert.equal((await request("GET", thresholdPath, 3)).status, 403);
+    assert.equal((await request("PUT", thresholdPath, 2, { requiredSignatures: 2 })).status, 403);
+    assert.equal((await request("PUT", "/communities/2/signing-threshold", 1, { requiredSignatures: 2 })).status, 403);
+    assert.equal((await request("GET", "/communities/999/signing-threshold", 1)).status, 404);
+    assert.equal((await request("PUT", "/communities/999/signing-threshold", 1, { requiredSignatures: 2 })).status, 404);
+    assert.equal((await request("GET", "/communities/nope/signing-threshold", 1)).status, 400);
+    for (const requiredSignatures of [undefined, null, 0, 1, -1, "2", 2.5, [], {}, true, 2147483648]) {
+      assert.equal((await request("PUT", thresholdPath, 1, { requiredSignatures })).status, 400);
+    }
+    assert.equal((await request("PUT", thresholdPath, 1, { requiredSignatures: 2 })).status, 409);
+    assert.equal((await request("POST", path, 1, { userId: 1 })).status, 201);
+    assert.equal((await request("PUT", thresholdPath, 1, { requiredSignatures: 2 })).status, 409);
+    assert.equal((await request("POST", path, 1, { userId: 2 })).status, 201);
+    assert.deepEqual(await request("PUT", thresholdPath, 1, { requiredSignatures: 2 }), {
+      status: 200, body: { requiredSignatures: 2, authorizedSignerCount: 2 },
+    });
+    assert.deepEqual((await request("GET", thresholdPath, 2)).body, { requiredSignatures: 2, authorizedSignerCount: 2 });
+    memberships.push({ id: 14, userId: 4, communityId: 1, role: "COMMUNITY_MEMBER" });
+    assert.equal((await request("POST", path, 1, { userId: 4 })).status, 201);
+    assert.deepEqual((await request("PUT", thresholdPath, 1, { requiredSignatures: 2 })).body,
+      { requiredSignatures: 2, authorizedSignerCount: 3 });
+    assert.deepEqual((await request("PUT", thresholdPath, 1, { requiredSignatures: 3 })).body,
+      { requiredSignatures: 3, authorizedSignerCount: 3 });
+    assert.equal((await request("PUT", thresholdPath, 1, { requiredSignatures: 4 })).status, 409);
+    assert.equal((await request("DELETE", `${path}/4`, 1)).status, 409);
+    assert.ok(signers.some((signer) => signer.membershipId === 14));
+    assert.equal((await request("PUT", thresholdPath, 1, { requiredSignatures: 2 })).status, 200);
+    assert.equal((await request("DELETE", `${path}/4`, 1)).status, 204);
+    assert.deepEqual((await request("GET", thresholdPath, 2)).body, { requiredSignatures: 2, authorizedSignerCount: 2 });
+
     const spec = require("../src/openapi");
     assert.ok(spec.paths["/communities/{communityId}/signers"].post);
     assert.ok(spec.paths["/communities/{communityId}/signers"].get);
     assert.ok(spec.paths["/communities/{communityId}/signers/{userId}"].delete);
     assert.ok(spec.paths["/communities/{communityId}/signers/me/public-info"].put);
     assert.ok(spec.paths["/communities/{communityId}/signers/me/public-info"].get);
+    assert.ok(spec.paths["/communities/{communityId}/signing-threshold"].put);
+    assert.ok(spec.paths["/communities/{communityId}/signing-threshold"].get);
     const schema = fs.readFileSync(pathLib.join(__dirname, "../prisma/schema.prisma"), "utf8");
     assert.match(schema, /publicKey\s+String\?/);
+    assert.match(schema, /requiredSignatures\s+Int\?/);
     const migration = fs.readFileSync(pathLib.join(__dirname, "../prisma/migrations/20261008190000_signer_public_key/migration.sql"), "utf8");
     assert.match(migration, /ADD COLUMN "publicKey" TEXT/);
+    const thresholdMigration = fs.readFileSync(pathLib.join(__dirname, "../prisma/migrations/20261008210000_signing_threshold/migration.sql"), "utf8");
+    assert.match(thresholdMigration, /ADD COLUMN "requiredSignatures" INTEGER/);
   } finally { server.close(); }
 });
