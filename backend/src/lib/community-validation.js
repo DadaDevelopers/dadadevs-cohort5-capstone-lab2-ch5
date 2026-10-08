@@ -1,5 +1,6 @@
 const MAX_NAME_LENGTH = 100;
 const MAX_DESCRIPTION_LENGTH = 500;
+const { normalizeEmail, isValidEmail } = require("./auth-validation");
 
 function validateName(value) {
   if (typeof value !== "string" || !value.trim() || value.trim().length > MAX_NAME_LENGTH) {
@@ -27,4 +28,10 @@ function parseCommunityId(value) {
   return Number.isSafeInteger(id) && id <= 2147483647 ? id : null;
 }
 
-module.exports = { validateName, validateDescription, validateJoinCode, parseCommunityId, MAX_NAME_LENGTH, MAX_DESCRIPTION_LENGTH };
+function validateMemberEmail(value) {
+  if (typeof value !== "string") return null;
+  const email = normalizeEmail(value);
+  return email.length <= 254 && isValidEmail(email) ? email : null;
+}
+
+module.exports = { validateName, validateDescription, validateJoinCode, parseCommunityId, validateMemberEmail, MAX_NAME_LENGTH, MAX_DESCRIPTION_LENGTH };

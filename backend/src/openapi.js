@@ -130,6 +130,42 @@ module.exports = {
           400: communityErrors[400], 401: communityErrors[401], 403: communityErrors[403], 404: communityErrors[404], 429: communityErrors[429], 500: communityErrors[500],
         },
       },
+      post: {
+        tags: ["Communities"], summary: "Add an existing user as a community member", security: communitySecurity,
+        description: "Requires the requester's current COMMUNITY_ADMIN membership. The user must already be registered; this does not grant signer authority.",
+        parameters: [communityIdParameter],
+        requestBody: jsonBody({ type: "object", required: ["email"], properties: { email: { type: "string", format: "email" } } }, { email: "member@example.com" }),
+        responses: {
+          201: { description: "Member added", content: { "application/json": { example: { member: { userId: 2, communityId: 1, role: "COMMUNITY_MEMBER" } } } } },
+          400: communityErrors[400], 401: communityErrors[401], 403: communityErrors[403], 404: errorResponse("Community or user not found"),
+          409: errorResponse("User is already a member"), 429: communityErrors[429], 500: communityErrors[500],
+        },
+      },
+    },
+    "/communities/{communityId}/members/{userId}/role": {
+      patch: {
+        tags: ["Communities"], summary: "Change a community member's role", security: communitySecurity,
+        description: "Only a current community admin may promote or demote. The last admin cannot be demoted.",
+        parameters: [communityIdParameter, { name: "userId", in: "path", required: true, schema: { type: "integer", minimum: 1 }, example: 2 }],
+        requestBody: jsonBody({ type: "object", required: ["role"], properties: { role: { type: "string", enum: ["COMMUNITY_MEMBER", "COMMUNITY_ADMIN"] } } }, { role: "COMMUNITY_ADMIN" }),
+        responses: {
+          200: { description: "Role updated", content: { "application/json": { example: { member: { userId: 2, communityId: 1, role: "COMMUNITY_ADMIN" } } } } },
+          400: communityErrors[400], 401: communityErrors[401], 403: communityErrors[403], 404: errorResponse("Community or member not found"),
+          409: errorResponse("Community must retain an admin"), 429: communityErrors[429], 500: communityErrors[500],
+        },
+      },
+    },
+    "/communities/{communityId}/members/{userId}": {
+      delete: {
+        tags: ["Communities"], summary: "Remove a community member", security: communitySecurity,
+        description: "Only a current community admin may remove members. The last admin and active authorized signers cannot be removed.",
+        parameters: [communityIdParameter, { name: "userId", in: "path", required: true, schema: { type: "integer", minimum: 1 }, example: 2 }],
+        responses: {
+          204: { description: "Member removed" },
+          400: communityErrors[400], 401: communityErrors[401], 403: communityErrors[403], 404: errorResponse("Community or member not found"),
+          409: errorResponse("Last admin or active signer conflict"), 429: communityErrors[429], 500: communityErrors[500],
+        },
+      },
     },
     // This endpoint reports database reachability as well as API health.
     "/health": {
