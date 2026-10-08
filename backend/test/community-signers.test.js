@@ -1,6 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const jwt = require("jsonwebtoken");
+const fs = require("node:fs");
+const pathLib = require("node:path");
 
 process.env.JWT_SECRET = "community-signers-test-secret";
 
@@ -38,7 +40,7 @@ const prisma = {
     async create({ data }) {
       if (forceUniqueRace) { forceUniqueRace = false; throw { code: "P2002" }; }
       if (signers.some((signer) => signer.membershipId === data.membershipId)) throw { code: "P2002" };
-      const signer = { id: nextSignerId++, membershipId: data.membershipId, createdAt: new Date() };
+      const signer = { id: nextSignerId++, membershipId: data.membershipId, publicKey: null, createdAt: new Date() };
       signers.push(signer);
       return signer;
     },
@@ -54,6 +56,12 @@ const prisma = {
       const index = signers.findIndex((signer) => signer.id === where.id);
       if (index < 0) throw { code: "P2025" };
       return signers.splice(index, 1)[0];
+    },
+    async updateMany({ where, data }) {
+      const signer = signers.find((item) => item.id === where.id);
+      if (!signer) return { count: 0 };
+      Object.assign(signer, data);
+      return { count: 1 };
     },
   },
   async $transaction(callback) { return callback(prisma); },
@@ -116,6 +124,7 @@ test("authorized signers are separate from community roles and scoped to members
     assert.equal(listed.status, 200);
     assert.equal(listed.body.signers.length, 1);
     assert.equal(listed.body.signers[0].userId, 2);
+    assert.equal(listed.body.signers[0].publicInfoRegistered, false);
     assert.equal(JSON.stringify(listed.body).includes("passwordHash"), false);
     assert.deepEqual((await request("GET", "/communities/2/signers", 1)).body, { signers: [] });
     assert.equal((await request("DELETE", `${path}/2`, 2)).status, 403);
@@ -133,6 +142,45 @@ test("authorized signers are separate from community roles and scoped to members
     const memberSignerElsewhere = await request("POST", "/communities/2/signers", 3, { userId: 1 });
     assert.equal(memberSignerElsewhere.status, 201);
     assert.equal(memberSignerElsewhere.body.signer.membershipRole, "COMMUNITY_MEMBER");
+    const publicInfoPath = "/communities/1/signers/me/public-info";
+    assert.deepEqual(await request("GET", publicInfoPath, 1), {
+      status: 200, body: { registered: false, publicKey: null },
+    });
+    assert.equal((await request("GET", publicInfoPath, null)).status, 401);
+    assert.equal((await request("PUT", publicInfoPath, null, { publicKey: "PUBLIC-A" })).status, 401);
+    assert.equal((await request("GET", publicInfoPath, 2)).status, 403);
+    assert.equal((await request("PUT", publicInfoPath, 2, { publicKey: "PUBLIC-A" })).status, 403);
+    assert.equal((await request("PUT", publicInfoPath, 3, { publicKey: "PUBLIC-A" })).status, 403);
+    assert.equal((await request("PUT", "/communities/999/signers/me/public-info", 1, { publicKey: "PUBLIC-A" })).status, 404);
+    assert.equal((await request("PUT", "/communities/nope/signers/me/public-info", 1, { publicKey: "PUBLIC-A" })).status, 400);
+    for (const publicKey of [undefined, "", "   ", 12, [], {}, "x".repeat(257)]) {
+      assert.equal((await request("PUT", publicInfoPath, 1, { publicKey })).status, 400);
+    }
+    for (const privateField of ["privateKey", "private_key", "seed", "seedPhrase", "seed_phrase", "mnemonic", "recoveryPhrase", "recovery_phrase", "WIF", "xprv"]) {
+      assert.deepEqual(await request("PUT", publicInfoPath, 1, { publicKey: "PUBLIC-A", [privateField]: "secret-value" }), {
+        status: 400, body: { error: "Private key material must never be submitted to the server" },
+      });
+    }
+    for (const publicKey of ["xprv-fake-private-value", `K${"1".repeat(51)}`, "one two three seed words"]) {
+      assert.equal((await request("PUT", publicInfoPath, 1, { publicKey })).status, 400);
+    }
+    assert.equal((await request("PUT", publicInfoPath, 1, { publicKey: "PUBLIC-A", nested: { privateKey: "secret-value" } })).status, 400);
+    assert.equal(signers.find((signer) => signer.membershipId === 10).publicKey, null);
+    const registered = await request("PUT", publicInfoPath, 1, { publicKey: "  PUBLIC-A  " });
+    assert.deepEqual(registered, { status: 200, body: { registered: true, publicKey: "PUBLIC-A" } });
+    assert.deepEqual(await request("GET", publicInfoPath, 1), registered);
+    assert.deepEqual(await request("PUT", publicInfoPath, 1, { publicKey: "PUBLIC-A" }), registered);
+    assert.deepEqual(await request("PUT", publicInfoPath, 1, { publicKey: "PUBLIC-B" }), {
+      status: 200, body: { registered: true, publicKey: "PUBLIC-B" },
+    });
+    assert.equal((await request("PUT", publicInfoPath, 1, { publicKey: "PUBLIC-C", seedPhrase: "secret-value" })).status, 400);
+    assert.equal((await request("GET", publicInfoPath, 1)).body.publicKey, "PUBLIC-B");
+    const listedWithInfo = await request("GET", path, 1);
+    assert.equal(listedWithInfo.body.signers[0].publicInfoRegistered, true);
+    assert.equal(JSON.stringify(listedWithInfo.body).includes("PUBLIC-B"), false);
+    assert.deepEqual(await request("GET", "/communities/2/signers/me/public-info", 1), {
+      status: 200, body: { registered: false, publicKey: null },
+    });
     assert.equal((await request("DELETE", `${path}/1`, 1)).status, 204);
     assert.equal((await request("GET", path, 1)).body.signers.length, 0);
     assert.equal((await request("GET", "/communities/2/signers", 1)).body.signers.length, 1);
@@ -141,5 +189,11 @@ test("authorized signers are separate from community roles and scoped to members
     assert.ok(spec.paths["/communities/{communityId}/signers"].post);
     assert.ok(spec.paths["/communities/{communityId}/signers"].get);
     assert.ok(spec.paths["/communities/{communityId}/signers/{userId}"].delete);
+    assert.ok(spec.paths["/communities/{communityId}/signers/me/public-info"].put);
+    assert.ok(spec.paths["/communities/{communityId}/signers/me/public-info"].get);
+    const schema = fs.readFileSync(pathLib.join(__dirname, "../prisma/schema.prisma"), "utf8");
+    assert.match(schema, /publicKey\s+String\?/);
+    const migration = fs.readFileSync(pathLib.join(__dirname, "../prisma/migrations/20261008190000_signer_public_key/migration.sql"), "utf8");
+    assert.match(migration, /ADD COLUMN "publicKey" TEXT/);
   } finally { server.close(); }
 });

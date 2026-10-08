@@ -9,6 +9,7 @@ const { authLimiter } = require("../middleware/auth-rate-limit");
 const controller = require("../controllers/community.controller");
 const memberController = require("../controllers/community-members.controller");
 const signerController = require("../controllers/community-signers.controller");
+const publicInfoController = require("../controllers/signer-public-info.controller");
 
 const router = express.Router();
 
@@ -26,6 +27,8 @@ router.delete("/:communityId/members/:userId", authenticate, memberController.re
 router.post("/:communityId/signers", authenticate, signerController.select);
 router.get("/:communityId/signers", authenticate, signerController.list);
 router.delete("/:communityId/signers/:userId", authenticate, signerController.remove);
+router.put("/:communityId/signers/me/public-info", authenticate, publicInfoController.put);
+router.get("/:communityId/signers/me/public-info", authenticate, publicInfoController.get);
 
 // A valid access token and current membership are both required.
 router.get("/:communityId/test/member", authenticate, requireCommunityMembership, (req, res) => {

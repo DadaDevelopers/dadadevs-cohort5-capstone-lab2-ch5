@@ -32,6 +32,7 @@ function signerResponse(signer, membership) {
     email: membership.user.email,
     membershipRole: membership.role,
     isAuthorizedSigner: true,
+    publicInfoRegistered: Boolean(signer.publicKey),
     createdAt: signer.createdAt,
   };
 }
@@ -47,7 +48,7 @@ async function selectSigner(adminId, communityId, targetUserId) {
     try {
       // The unique membershipId constraint is the final guard against duplicate signer selection.
       const signer = await tx.authorizedSigner.create({
-        data: { membershipId: membership.id }, select: { id: true, createdAt: true },
+        data: { membershipId: membership.id }, select: { id: true, publicKey: true, createdAt: true },
       });
       return { signer: signerResponse(signer, membership) };
     } catch (error) {
@@ -66,7 +67,7 @@ async function listSigners(userId, communityId) {
   if (!requester) throw new SignerManagementError(403, "Forbidden");
   const signers = await prisma.authorizedSigner.findMany({
     where: { membership: { is: { communityId } } }, orderBy: { createdAt: "asc" },
-    select: { id: true, createdAt: true, membership: { select: { role: true, user: { select: safeUser } } } },
+    select: { id: true, publicKey: true, createdAt: true, membership: { select: { role: true, user: { select: safeUser } } } },
   });
   return { signers: signers.map((signer) => signerResponse(signer, signer.membership)) };
 }

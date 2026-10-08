@@ -174,7 +174,7 @@ module.exports = {
         parameters: [communityIdParameter],
         requestBody: jsonBody({ type: "object", required: ["userId"], properties: { userId: { type: "integer", minimum: 1 } } }, { userId: 2 }),
         responses: {
-          201: { description: "Signer selected", content: { "application/json": { example: { signer: { signerId: 1, userId: 2, firstName: "Ada", lastName: "Lovelace", email: "ada@example.com", membershipRole: "COMMUNITY_MEMBER", isAuthorizedSigner: true, createdAt: "2026-10-08T10:00:00.000Z" } } } } },
+          201: { description: "Signer selected", content: { "application/json": { example: { signer: { signerId: 1, userId: 2, firstName: "Ada", lastName: "Lovelace", email: "ada@example.com", membershipRole: "COMMUNITY_MEMBER", isAuthorizedSigner: true, publicInfoRegistered: false, createdAt: "2026-10-08T10:00:00.000Z" } } } } },
           400: communityErrors[400], 401: communityErrors[401], 403: communityErrors[403], 404: communityErrors[404],
           409: errorResponse("Target is not a member or is already a signer"), 429: communityErrors[429], 500: communityErrors[500],
         },
@@ -184,7 +184,7 @@ module.exports = {
         description: "Any current member of the community may view its signers. Only safe user fields are returned.",
         parameters: [communityIdParameter],
         responses: {
-          200: { description: "Community signers", content: { "application/json": { example: { signers: [{ signerId: 1, userId: 2, firstName: "Ada", lastName: "Lovelace", email: "ada@example.com", membershipRole: "COMMUNITY_MEMBER", isAuthorizedSigner: true, createdAt: "2026-10-08T10:00:00.000Z" }] } } } },
+          200: { description: "Community signers; keys are omitted", content: { "application/json": { example: { signers: [{ signerId: 1, userId: 2, firstName: "Ada", lastName: "Lovelace", email: "ada@example.com", membershipRole: "COMMUNITY_MEMBER", isAuthorizedSigner: true, publicInfoRegistered: true, createdAt: "2026-10-08T10:00:00.000Z" }] } } } },
           400: communityErrors[400], 401: communityErrors[401], 403: communityErrors[403], 404: communityErrors[404], 429: communityErrors[429], 500: communityErrors[500],
         },
       },
@@ -198,6 +198,32 @@ module.exports = {
           204: { description: "Signer authority removed" },
           400: communityErrors[400], 401: communityErrors[401], 403: communityErrors[403], 404: errorResponse("Community, membership, or signer not found"),
           409: errorResponse("Signer set is locked after wallet creation (future rule)"), 429: communityErrors[429], 500: communityErrors[500],
+        },
+      },
+    },
+    "/communities/{communityId}/signers/me/public-info": {
+      put: {
+        tags: ["Communities"], summary: "Register or update my signer public information", security: communitySecurity,
+        description: "Only the current authorized signer may register public information for this community. Only public signing information belongs on the backend. Never submit private keys, mnemonic phrases, or seed phrases. The public-key format is not yet fixed; this endpoint checks type and length only.",
+        parameters: [communityIdParameter],
+        requestBody: jsonBody({ type: "object", required: ["publicKey"], additionalProperties: false, properties: { publicKey: { type: "string", minLength: 1, maxLength: 256 } } }, { publicKey: "02FAKE_PUBLIC_KEY_EXAMPLE" }),
+        responses: {
+          200: { description: "Public information stored", content: { "application/json": { example: { registered: true, publicKey: "02FAKE_PUBLIC_KEY_EXAMPLE" } } } },
+          400: errorResponse("Invalid input or private material submitted"), 401: communityErrors[401], 403: communityErrors[403],
+          404: communityErrors[404], 429: communityErrors[429], 500: communityErrors[500],
+        },
+      },
+      get: {
+        tags: ["Communities"], summary: "Get my signer public information", security: communitySecurity,
+        description: "Only the current authorized signer may view their registration status in this community.",
+        parameters: [communityIdParameter],
+        responses: {
+          200: { description: "Current registration status", content: { "application/json": { examples: {
+            registered: { value: { registered: true, publicKey: "02FAKE_PUBLIC_KEY_EXAMPLE" } },
+            pending: { value: { registered: false, publicKey: null } },
+          } } } },
+          400: communityErrors[400], 401: communityErrors[401], 403: communityErrors[403],
+          404: communityErrors[404], 429: communityErrors[429], 500: communityErrors[500],
         },
       },
     },

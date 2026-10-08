@@ -53,6 +53,7 @@ model CommunityMembership {
 model AuthorizedSigner {
   id           Int                 @id @default(autoincrement())
   membershipId Int                 @unique
+  publicKey    String?
   createdAt    DateTime            @default(now())
   membership   CommunityMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
 }
