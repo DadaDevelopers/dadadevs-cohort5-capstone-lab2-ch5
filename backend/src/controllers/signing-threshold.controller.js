@@ -1,3 +1,4 @@
+const logError = require("../lib/log-error");
 const service = require("../services/community-signers.service");
 const { parseCommunityId, validateRequiredSignatures } = require("../lib/community-validation");
 
@@ -5,7 +6,7 @@ function failure(error, res) {
   if (error instanceof service.SignerManagementError) {
     return res.status(error.status).json({ error: error.message });
   }
-  console.error("Signing threshold request failed", error);
+  logError("Signing threshold request failed", error);
   return res.status(500).json({ error: "Internal server error" });
 }
 

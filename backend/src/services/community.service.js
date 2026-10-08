@@ -1,12 +1,9 @@
 const crypto = require("node:crypto");
 const prisma = require("../lib/prisma");
+const { requireMembership } = require("./community-access.service");
 
-const code = () => `DADA-${crypto.randomBytes(9).toString("hex").slice(0, 12).toUpperCase()}`;
+const generateJoinCode = () => `DADA-${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
 const isUniqueConflict = (error) => error?.code === "P2002";
-const conflictsOn = (error, field) => {
-  const target = error?.meta?.target;
-  return Array.isArray(target) ? target.includes(field) : typeof target === "string" && target.includes(field);
-};
 const findCommunityIdByName = async (name) => {
   const rows = await prisma.$queryRaw`
     SELECT "id" FROM "Community" WHERE lower(btrim("name")) = lower(${name}) LIMIT 1
@@ -24,7 +21,7 @@ class CommunityNameConflict extends Error {
 async function createCommunity(userId, name, description) {
   if (await findCommunityIdByName(name)) throw new CommunityNameConflict();
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const joinCode = code();
+    const joinCode = generateJoinCode();
     try {
       return await prisma.$transaction(async (tx) => {
         const community = await tx.community.create({
@@ -64,7 +61,8 @@ async function joinCommunity(userId, joinCode) {
       data: { userId, communityId: community.id, role: "COMMUNITY_MEMBER" },
     });
   } catch (error) {
-    if (isUniqueConflict(error) && (conflictsOn(error, "userId") || conflictsOn(error, "communityId"))) {
+    // Prisma's PostgreSQL adapter may omit meta.target on this compound unique constraint.
+    if (isUniqueConflict(error)) {
       return { conflict: true };
     }
     throw error;
@@ -101,8 +99,7 @@ async function getCommunityByName(userId, name) {
 }
 
 async function listMembers(userId, communityId) {
-  const access = await getCommunity(userId, communityId);
-  if (!access.community) return access;
+  await requireMembership(prisma, userId, communityId);
   const memberships = await prisma.communityMembership.findMany({
     where: { communityId }, orderBy: { createdAt: "asc" },
     select: { role: true, user: { select: { id: true, firstName: true, lastName: true, email: true } } },

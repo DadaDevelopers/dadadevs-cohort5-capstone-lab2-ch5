@@ -1,27 +1,7 @@
 const prisma = require("../lib/prisma");
 
-class SignerManagementError extends Error {
-  constructor(status, message) {
-    super(message);
-    this.status = status;
-  }
-}
-
-const membershipKey = (userId, communityId) => ({ userId_communityId: { userId, communityId } });
+const { CommunityAccessError: SignerManagementError, membershipKey, requireMembership, asAdmin } = require("./community-access.service");
 const safeUser = { id: true, firstName: true, lastName: true, email: true };
-
-async function asAdmin(userId, communityId, operation) {
-  return prisma.$transaction(async (tx) => {
-    // Share the community lock used by member removal so signer selection cannot race a membership delete.
-    const community = await tx.$queryRaw`SELECT "id", "requiredSignatures" FROM "Community" WHERE "id" = ${communityId} FOR UPDATE`;
-    if (community.length === 0) throw new SignerManagementError(404, "Community not found");
-    const requester = await tx.communityMembership.findUnique({
-      where: membershipKey(userId, communityId), select: { role: true },
-    });
-    if (requester?.role !== "COMMUNITY_ADMIN") throw new SignerManagementError(403, "Forbidden");
-    return operation(tx, community[0]);
-  });
-}
 
 const authorizedSignerCount = (client, communityId) => client.authorizedSigner.count({
   where: { membership: { is: { communityId } } },
@@ -63,12 +43,7 @@ async function selectSigner(adminId, communityId, targetUserId) {
 }
 
 async function listSigners(userId, communityId) {
-  const community = await prisma.community.findUnique({ where: { id: communityId }, select: { id: true } });
-  if (!community) throw new SignerManagementError(404, "Community not found");
-  const requester = await prisma.communityMembership.findUnique({
-    where: membershipKey(userId, communityId), select: { id: true },
-  });
-  if (!requester) throw new SignerManagementError(403, "Forbidden");
+  await requireMembership(prisma, userId, communityId);
   const signers = await prisma.authorizedSigner.findMany({
     where: { membership: { is: { communityId } } }, orderBy: { createdAt: "asc" },
     select: { id: true, publicKey: true, createdAt: true, membership: { select: { role: true, user: { select: safeUser } } } },
@@ -86,12 +61,12 @@ async function removeSigner(adminId, communityId, targetUserId) {
     if (!membership.authorizedSigner) throw new SignerManagementError(404, "Authorized signer not found");
     if (community.requiredSignatures !== null) {
       const count = await authorizedSignerCount(tx, communityId);
-      // Never silently reduce the admin's configured M-of-N security requirement.
+      // Do not remove a signer if the configured threshold would become impossible to satisfy.
       if (community.requiredSignatures > count - 1) {
         throw new SignerManagementError(409, "Lower the signing threshold before removing this signer");
       }
     }
-    // Wallet-stage invariant: once a wallet exists, reject signer removal here before deleting.
+    // Add the wallet lock here when wallet creation is implemented.
     await tx.authorizedSigner.delete({ where: { id: membership.authorizedSigner.id } });
   });
 }
@@ -110,18 +85,21 @@ async function setSigningThreshold(adminId, communityId, requiredSignatures) {
 }
 
 async function getSigningThreshold(userId, communityId) {
-  const community = await prisma.community.findUnique({
-    where: { id: communityId }, select: { requiredSignatures: true },
-  });
-  if (!community) throw new SignerManagementError(404, "Community not found");
-  const membership = await prisma.communityMembership.findUnique({
-    where: membershipKey(userId, communityId), select: { id: true },
-  });
-  if (!membership) throw new SignerManagementError(403, "Forbidden");
-  return {
-    requiredSignatures: community.requiredSignatures,
-    authorizedSignerCount: await authorizedSignerCount(prisma, communityId),
-  };
+  // Read M and N from one snapshot, even if an admin changes them during this request.
+  return prisma.$transaction(async (tx) => {
+    const community = await tx.community.findUnique({
+      where: { id: communityId }, select: { requiredSignatures: true },
+    });
+    if (!community) throw new SignerManagementError(404, "Community not found");
+    const membership = await tx.communityMembership.findUnique({
+      where: membershipKey(userId, communityId), select: { id: true },
+    });
+    if (!membership) throw new SignerManagementError(403, "Forbidden");
+    return {
+      requiredSignatures: community.requiredSignatures,
+      authorizedSignerCount: await authorizedSignerCount(tx, communityId),
+    };
+  }, { isolationLevel: "RepeatableRead" });
 }
 
 module.exports = { SignerManagementError, selectSigner, listSigners, removeSigner, setSigningThreshold, getSigningThreshold };

@@ -1,11 +1,11 @@
+const logError = require("../lib/log-error");
 const service = require("../services/signer-public-info.service");
 const { parseCommunityId } = require("../lib/community-validation");
 const { validatePublicInfo } = require("../lib/signer-public-info-validation");
 
 function failure(error, res) {
   if (error instanceof service.PublicInfoError) return res.status(error.status).json({ error: error.message });
-  // Prisma diagnostics may contain query values; log only a safe error identifier.
-  console.error("Signer public info request failed", error?.code || error?.name || "unknown");
+  logError("Signer public info request failed", error);
   return res.status(500).json({ error: "Internal server error" });
 }
 

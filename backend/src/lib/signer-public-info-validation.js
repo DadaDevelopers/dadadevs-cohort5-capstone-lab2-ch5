@@ -3,10 +3,10 @@ const PRIVATE_FIELDS = new Set([
   "privatekey", "seed", "seedphrase", "mnemonic", "recoveryphrase", "wif", "xprv", "xpriv", "secret",
 ]);
 const PRIVATE_ERROR = "Private key material must never be submitted to the server";
-const WIF_PATTERN = /^(?:5[1-9A-HJ-NP-Za-km-z]{50}|[KL][1-9A-HJ-NP-Za-km-z]{51})$/;
+const WIF_PATTERN = /^(?:[59][1-9A-HJ-NP-Za-km-z]{50}|[KLc][1-9A-HJ-NP-Za-km-z]{51})$/;
 
 function looksLikePrivateKey(value) {
-  return /^(?:xprv|tprv|yprv|zprv|uprv|vprv|wif[:=])/i.test(value) || WIF_PATTERN.test(value);
+  return /^(?:xprv|xpriv|tprv|yprv|zprv|uprv|vprv|wif[:=]|-----BEGIN .*PRIVATE KEY)/i.test(value) || WIF_PATTERN.test(value);
 }
 
 function containsPrivateField(body) {

@@ -1,3 +1,4 @@
+const logError = require("../lib/log-error");
 const service = require("../services/community-members.service");
 const { parseCommunityId, validateMemberEmail } = require("../lib/community-validation");
 
@@ -17,7 +18,7 @@ function failure(error, res) {
   }
   if (error?.code === "P2002") return res.status(409).json({ error: "Already a member of this community" });
   if (error?.code === "P2025") return res.status(404).json({ error: "Community member not found" });
-  console.error("Community member request failed", error);
+  logError("Community member request failed", error);
   return res.status(500).json({ error: "Internal server error" });
 }
 

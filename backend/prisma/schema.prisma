@@ -56,7 +56,7 @@ model AuthorizedSigner {
   membershipId Int                 @unique
   publicKey    String?
   createdAt    DateTime            @default(now())
-  membership   CommunityMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  membership   CommunityMembership @relation(fields: [membershipId], references: [id], onDelete: Restrict)
 }
 
 model PasswordResetToken {

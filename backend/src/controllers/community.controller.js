@@ -1,12 +1,15 @@
+const logError = require("../lib/log-error");
 const service = require("../services/community.service");
+const { CommunityAccessError } = require("../services/community-access.service");
 const { validateName, validateDescription, validateJoinCode, parseCommunityId } = require("../lib/community-validation");
 
 function failure(error, res) {
+  if (error instanceof CommunityAccessError) return res.status(error.status).json({ error: error.message });
   if (error?.code === "COMMUNITY_NAME_CONFLICT") {
     return res.status(409).json({ error: "Community name already exists" });
   }
   if (error?.code === "P2002") return res.status(409).json({ error: "Conflict" });
-  console.error("Community request failed", error);
+  logError("Community request failed", error);
   return res.status(500).json({ error: "Internal server error" });
 }
 

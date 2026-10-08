@@ -1,4 +1,3 @@
-// Reuse the same error schema across authentication and community checks.
 const errorResponse = (description) => ({
   description,
   content: {
@@ -8,13 +7,11 @@ const errorResponse = (description) => ({
   },
 });
 
-// Mark auth request bodies as required and include a usable example.
 const jsonBody = (schema, example) => ({
   required: true,
   content: { "application/json": { schema, example } },
 });
 
-// Both registration and /auth/me return the user in the same envelope.
 const userResponse = (description) => ({
   description,
   content: { "application/json": { schema: {
@@ -24,20 +21,10 @@ const userResponse = (description) => ({
 });
 
 const communityIdParameter = {
-  // Shared by the temporary community permission checks below.
   name: "communityId", in: "path", required: true,
   description: "Community to authorize against",
-  schema: { type: "integer", minimum: 1 }, example: 1,
+  schema: { type: "integer", minimum: 1, maximum: 2147483647 }, example: 1,
 };
-
-// The temporary checks share success and permission-error response shapes.
-const communityTestResponses = (message) => ({
-  200: { description: message, content: { "application/json": { example: { message } } } },
-  401: errorResponse("Unauthorized"),
-  403: errorResponse("Not a member or insufficient community permission"),
-  429: errorResponse("Rate limited"),
-});
-
 const communitySecurity = [{ bearerAuth: [] }];
 const communityErrors = {
   400: errorResponse("Invalid input"),
@@ -69,7 +56,7 @@ module.exports = {
           id: { type: "integer", example: 1 },
           firstName: { type: "string", example: "Ada" },
           lastName: { type: "string", example: "Lovelace" },
-          email: { type: "string", format: "email", example: "ada@example.com" },
+          email: { type: "string", format: "email", maxLength: 254, example: "ada@example.com" },
           createdAt: { type: "string", format: "date-time" },
           updatedAt: { type: "string", format: "date-time" },
         },
@@ -134,7 +121,7 @@ module.exports = {
         tags: ["Communities"], summary: "Add an existing user as a community member", security: communitySecurity,
         description: "Requires the requester's current COMMUNITY_ADMIN membership. The user must already be registered; this does not grant signer authority.",
         parameters: [communityIdParameter],
-        requestBody: jsonBody({ type: "object", required: ["email"], properties: { email: { type: "string", format: "email" } } }, { email: "member@example.com" }),
+        requestBody: jsonBody({ type: "object", required: ["email"], properties: { email: { type: "string", format: "email", maxLength: 254 } } }, { email: "member@example.com" }),
         responses: {
           201: { description: "Member added", content: { "application/json": { example: { member: { userId: 2, communityId: 1, role: "COMMUNITY_MEMBER" } } } } },
           400: communityErrors[400], 401: communityErrors[401], 403: communityErrors[403], 404: errorResponse("Community or user not found"),
@@ -146,7 +133,7 @@ module.exports = {
       patch: {
         tags: ["Communities"], summary: "Change a community member's role", security: communitySecurity,
         description: "Only a current community admin may promote or demote. The last admin cannot be demoted.",
-        parameters: [communityIdParameter, { name: "userId", in: "path", required: true, schema: { type: "integer", minimum: 1 }, example: 2 }],
+        parameters: [communityIdParameter, { name: "userId", in: "path", required: true, schema: { type: "integer", minimum: 1, maximum: 2147483647 }, example: 2 }],
         requestBody: jsonBody({ type: "object", required: ["role"], properties: { role: { type: "string", enum: ["COMMUNITY_MEMBER", "COMMUNITY_ADMIN"] } } }, { role: "COMMUNITY_ADMIN" }),
         responses: {
           200: { description: "Role updated", content: { "application/json": { example: { member: { userId: 2, communityId: 1, role: "COMMUNITY_ADMIN" } } } } },
@@ -159,7 +146,7 @@ module.exports = {
       delete: {
         tags: ["Communities"], summary: "Remove a community member", security: communitySecurity,
         description: "Only a current community admin may remove members. The last admin and active authorized signers cannot be removed.",
-        parameters: [communityIdParameter, { name: "userId", in: "path", required: true, schema: { type: "integer", minimum: 1 }, example: 2 }],
+        parameters: [communityIdParameter, { name: "userId", in: "path", required: true, schema: { type: "integer", minimum: 1, maximum: 2147483647 }, example: 2 }],
         responses: {
           204: { description: "Member removed" },
           400: communityErrors[400], 401: communityErrors[401], 403: communityErrors[403], 404: errorResponse("Community or member not found"),
@@ -193,18 +180,18 @@ module.exports = {
       delete: {
         tags: ["Communities"], summary: "Remove an authorized signer", security: communitySecurity,
         description: "Only a current community admin may remove signer authority. Membership remains. Removal is rejected if the remaining signer count would fall below the configured threshold. Once wallet creation is implemented, signer removal must also be locked after wallet creation.",
-        parameters: [communityIdParameter, { name: "userId", in: "path", required: true, schema: { type: "integer", minimum: 1 }, example: 2 }],
+        parameters: [communityIdParameter, { name: "userId", in: "path", required: true, schema: { type: "integer", minimum: 1, maximum: 2147483647 }, example: 2 }],
         responses: {
           204: { description: "Signer authority removed" },
           400: communityErrors[400], 401: communityErrors[401], 403: communityErrors[403], 404: errorResponse("Community, membership, or signer not found"),
-          409: errorResponse("Removal would invalidate the threshold; wallet-stage lock is a future rule"), 429: communityErrors[429], 500: communityErrors[500],
+          409: errorResponse("Removal would invalidate the configured threshold"), 429: communityErrors[429], 500: communityErrors[500],
         },
       },
     },
     "/communities/{communityId}/signers/me/public-info": {
       put: {
         tags: ["Communities"], summary: "Register or update my signer public information", security: communitySecurity,
-        description: "Only the current authorized signer may register public information for this community. Only public signing information belongs on the backend. Never submit private keys, mnemonic phrases, or seed phrases. The public-key format is not yet fixed; this endpoint checks type and length only.",
+        description: "Only the current authorized signer may register public information for this community. Only public signing information belongs on the backend. Never submit private keys, mnemonic phrases, or seed phrases. The public-key format is not yet fixed; this endpoint trims the value, checks type and length, and rejects whitespace and recognizable private key material.",
         parameters: [communityIdParameter],
         requestBody: jsonBody({ type: "object", required: ["publicKey"], additionalProperties: false, properties: { publicKey: { type: "string", minLength: 1, maxLength: 256 } } }, { publicKey: "02FAKE_PUBLIC_KEY_EXAMPLE" }),
         responses: {
@@ -232,11 +219,11 @@ module.exports = {
         tags: ["Communities"], summary: "Set the multisig signing threshold", security: communitySecurity,
         description: "Only a current COMMUNITY_ADMIN may set M. With 3 AuthorizedSigners and requiredSignatures 2, the future wallet would be 2-of-3. At least two signers are required; M must not exceed N. The threshold remains editable until wallet creation is implemented.",
         parameters: [communityIdParameter],
-        requestBody: jsonBody({ type: "object", required: ["requiredSignatures"], properties: { requiredSignatures: { type: "integer", minimum: 2 } } }, { requiredSignatures: 2 }),
+        requestBody: jsonBody({ type: "object", required: ["requiredSignatures"], properties: { requiredSignatures: { type: "integer", minimum: 2, maximum: 2147483647 } } }, { requiredSignatures: 2 }),
         responses: {
           200: { description: "Threshold configured", content: { "application/json": { example: { requiredSignatures: 2, authorizedSignerCount: 3 } } } },
           400: communityErrors[400], 401: communityErrors[401], 403: communityErrors[403], 404: communityErrors[404],
-          409: errorResponse("Fewer than two signers, threshold exceeds signer count, or future wallet lock"),
+          409: errorResponse("Fewer than two signers or threshold exceeds signer count"),
           429: communityErrors[429], 500: communityErrors[500],
         },
       },
@@ -254,7 +241,6 @@ module.exports = {
         },
       },
     },
-    // This endpoint reports database reachability as well as API health.
     "/health": {
       get: {
         summary: "Check API and database health",
@@ -264,24 +250,22 @@ module.exports = {
         },
       },
     },
-    // Registration documents its validation and duplicate-email responses.
     "/auth/register": {
       post: {
         summary: "Register a user",
         requestBody: jsonBody({
           type: "object", required: ["firstName", "lastName", "email", "password"],
-          properties: { firstName: { type: "string" }, lastName: { type: "string" }, email: { type: "string", format: "email" }, password: { type: "string", minLength: 8 } },
+          properties: { firstName: { type: "string", minLength: 1, maxLength: 100 }, lastName: { type: "string", minLength: 1, maxLength: 100 }, email: { type: "string", format: "email", maxLength: 254 }, password: { type: "string", minLength: 8, description: "At most 72 UTF-8 bytes (bcrypt limit)" } },
         }, { firstName: "Ada", lastName: "Lovelace", email: "ada@example.com", password: "example-password" }),
         responses: { 201: userResponse("User created"), 400: errorResponse("Invalid input"), 409: errorResponse("Email already registered"), 429: errorResponse("Rate limited") },
       },
     },
-    // Login returns both token types and the authenticated user.
     "/auth/login": {
       post: {
         summary: "Log in",
         requestBody: jsonBody({
           type: "object", required: ["email", "password"],
-          properties: { email: { type: "string", format: "email" }, password: { type: "string" } },
+          properties: { email: { type: "string", format: "email", maxLength: 254 }, password: { type: "string" } },
         }, { email: "ada@example.com", password: "example-password" }),
         responses: {
           200: { description: "Access and refresh tokens", content: { "application/json": { schema: { type: "object", properties: { token: { type: "string" }, refreshToken: { type: "string" }, user: { $ref: "#/components/schemas/User" } } } } } },
@@ -289,7 +273,6 @@ module.exports = {
         },
       },
     },
-    // Refresh accepts a refresh token and returns an access token.
     "/auth/refresh": {
       post: {
         summary: "Get a new access token",
@@ -297,58 +280,37 @@ module.exports = {
         responses: { 200: { description: "New access token", content: { "application/json": { example: { token: "<access-token>" } } } }, 401: errorResponse("Invalid or expired refresh token"), 429: errorResponse("Rate limited") },
       },
     },
-    // Reading the current user requires bearer authentication.
     "/auth/me": {
       get: {
         summary: "Get the authenticated user", security: [{ bearerAuth: [] }],
         responses: { 200: userResponse("Current user"), 401: errorResponse("Unauthorized"), 429: errorResponse("Rate limited") },
       },
     },
-    // Membership is evaluated for the community named in the path.
-    "/communities/{communityId}/test/member": {
-      get: {
-        tags: ["Community"],
-        summary: "Development authorization test: community member",
-        description: "Checks current membership in this community.",
-        parameters: [communityIdParameter], security: [{ bearerAuth: [] }],
-        responses: communityTestResponses("Community membership confirmed"),
-      },
-    },
-    // Admin access requires the COMMUNITY_ADMIN membership role.
-    "/communities/{communityId}/test/admin": {
-      get: {
-        tags: ["Community"],
-        summary: "Development authorization test: community admin",
-        description: "Checks current COMMUNITY_ADMIN membership in this community.",
-        parameters: [communityIdParameter], security: [{ bearerAuth: [] }],
-        responses: communityTestResponses("Community admin access granted"),
-      },
-    },
-    // Signer access requires an AuthorizedSigner linked to this membership.
-    "/communities/{communityId}/test/signer": {
-      get: {
-        tags: ["Community"],
-        summary: "Development authorization test: authorized signer",
-        description: "Checks an AuthorizedSigner record linked to this community membership.",
-        parameters: [communityIdParameter], security: [{ bearerAuth: [] }],
-        responses: communityTestResponses("Authorized signer access granted"),
-      },
-    },
-    // The same acknowledgement is returned whether the email exists or not.
     "/auth/forgot-password": {
       post: {
         summary: "Request a password reset",
-        requestBody: jsonBody({ type: "object", required: ["email"], properties: { email: { type: "string", format: "email" } } }, { email: "ada@example.com" }),
+        requestBody: jsonBody({ type: "object", required: ["email"], properties: { email: { type: "string", format: "email", maxLength: 254 } } }, { email: "ada@example.com" }),
         responses: { 200: { description: "Generic acknowledgement", content: { "application/json": { example: { message: "If the email exists, the reset request was accepted" } } } }, 400: errorResponse("Invalid email"), 429: errorResponse("Rate limited") },
       },
     },
-    // An expired or already used reset token is rejected.
     "/auth/reset-password": {
       post: {
         summary: "Set a new password",
-        requestBody: jsonBody({ type: "object", required: ["token", "newPassword"], properties: { token: { type: "string" }, newPassword: { type: "string", minLength: 8 } } }, { token: "<reset-token>", newPassword: "new-example-password" }),
+        requestBody: jsonBody({ type: "object", required: ["token", "newPassword"], properties: { token: { type: "string", minLength: 1, maxLength: 256 }, newPassword: { type: "string", minLength: 8, description: "At most 72 UTF-8 bytes (bcrypt limit)" } } }, { token: "<reset-token>", newPassword: "new-example-password" }),
         responses: { 200: { description: "Password changed", content: { "application/json": { example: { message: "Password reset successful" } } } }, 400: errorResponse("Invalid input"), 401: errorResponse("Invalid or expired reset token"), 429: errorResponse("Rate limited") },
       },
     },
   },
 };
+
+// JSON parsing happens before controllers, so these errors apply to every request body.
+for (const [path, item] of Object.entries(module.exports.paths)) {
+  for (const operation of Object.values(item)) {
+    if (path.startsWith("/auth/")) operation.responses[500] = errorResponse("Internal server error");
+    if (operation.requestBody) {
+      operation.responses[400] ||= errorResponse("Invalid JSON or input");
+      operation.responses[413] = errorResponse("Request body exceeds 100 KB");
+      operation.responses[415] = errorResponse("Unsupported request encoding");
+    }
+  }
+}

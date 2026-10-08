@@ -1,26 +1,4 @@
-const prisma = require("../lib/prisma");
-
-class MemberManagementError extends Error {
-  constructor(status, message) {
-    super(message);
-    this.status = status;
-  }
-}
-
-const membershipKey = (userId, communityId) => ({ userId_communityId: { userId, communityId } });
-
-async function asAdmin(userId, communityId, operation) {
-  return prisma.$transaction(async (tx) => {
-    // Serialize admin mutations so concurrent demotions/removals cannot leave zero admins.
-    const community = await tx.$queryRaw`SELECT "id" FROM "Community" WHERE "id" = ${communityId} FOR UPDATE`;
-    if (community.length === 0) throw new MemberManagementError(404, "Community not found");
-    const requester = await tx.communityMembership.findUnique({
-      where: membershipKey(userId, communityId), select: { role: true },
-    });
-    if (requester?.role !== "COMMUNITY_ADMIN") throw new MemberManagementError(403, "Forbidden");
-    return operation(tx);
-  });
-}
+const { CommunityAccessError: MemberManagementError, membershipKey, asAdmin } = require("./community-access.service");
 
 async function addMember(adminId, communityId, email) {
   return asAdmin(adminId, communityId, async (tx) => {
@@ -45,7 +23,7 @@ async function addMember(adminId, communityId, email) {
 
 async function requireTarget(tx, communityId, targetUserId, lock = false) {
   if (lock) {
-    // This row lock also prevents an AuthorizedSigner FK insert between the check and delete.
+    // Block a new AuthorizedSigner from being linked while this membership is removed.
     const rows = await tx.$queryRaw`
       SELECT "id" FROM "CommunityMembership"
       WHERE "communityId" = ${communityId} AND "userId" = ${targetUserId} FOR UPDATE
@@ -61,6 +39,7 @@ async function requireTarget(tx, communityId, targetUserId, lock = false) {
 }
 
 async function requireAnotherAdmin(tx, communityId) {
+  // Keep at least one admin so the community cannot be left unmanaged.
   const count = await tx.communityMembership.count({
     where: { communityId, role: "COMMUNITY_ADMIN" },
   });

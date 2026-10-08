@@ -11,8 +11,8 @@ function authenticate(req, res, next) {
   }
 
   try {
-    const payload = jwt.verify(match[1], process.env.JWT_SECRET);
-    if (payload.type === "refresh" || !Number.isInteger(payload.userId) || payload.userId < 1) {
+    const payload = jwt.verify(match[1], process.env.JWT_SECRET, { algorithms: ["HS256"] });
+    if (payload.type === "refresh" || !Number.isInteger(payload.userId) || payload.userId < 1 || payload.userId > 2147483647) {
       return res.status(401).json({ error: "Unauthorized" });
     }
     req.userId = payload.userId;

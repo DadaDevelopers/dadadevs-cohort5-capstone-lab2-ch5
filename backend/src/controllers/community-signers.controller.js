@@ -1,3 +1,4 @@
+const logError = require("../lib/log-error");
 const service = require("../services/community-signers.service");
 const { parseCommunityId, validateUserIdBody } = require("../lib/community-validation");
 
@@ -7,7 +8,7 @@ function failure(error, res) {
   }
   if (error?.code === "P2002") return res.status(409).json({ error: "Already an authorized signer" });
   if (error?.code === "P2025") return res.status(404).json({ error: "Authorized signer not found" });
-  console.error("Community signer request failed", error);
+  logError("Community signer request failed", error);
   return res.status(500).json({ error: "Internal server error" });
 }
 
