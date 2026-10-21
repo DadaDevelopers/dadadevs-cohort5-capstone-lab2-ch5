@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const jwt = require("jsonwebtoken");
 const fs = require("node:fs");
 const pathLib = require("node:path");
+const secp = require("tiny-secp256k1");
 
 process.env.JWT_SECRET = "community-signers-test-secret";
 
@@ -19,8 +20,10 @@ const memberships = [
 const signers = [];
 let nextSignerId = 1;
 let forceUniqueRace = false;
+const validPublicKey = (byte) => Buffer.from(secp.pointFromScalar(Buffer.alloc(32, byte), true)).toString("hex");
 
 const prisma = {
+  communityWallet: { async findUnique() { return null; } },
   community: {
     async findUnique({ where }) { return communities.find((item) => item.id === where.id) || null; },
     async update({ where, data }) {
@@ -42,6 +45,13 @@ const prisma = {
     },
   },
   authorizedSigner: {
+    async findFirst({ where }) {
+      return signers.find((signer) => {
+        const member = memberships.find((item) => item.id === signer.membershipId);
+        return signer.id !== where.id.not && member?.communityId === where.membership.is.communityId &&
+          signer.publicKey?.toLowerCase() === where.publicKey.equals.toLowerCase();
+      }) || null;
+    },
     async count({ where }) {
       return signers.filter((signer) => memberships.some((member) =>
         member.id === signer.membershipId && member.communityId === where.membership.is.communityId)).length;
@@ -158,11 +168,11 @@ test("authorized signers are separate from community roles and scoped to members
     assert.equal((await request("GET", publicInfoPath, null)).status, 401);
     assert.equal((await request("PUT", publicInfoPath, null, { publicKey: "PUBLIC-A" })).status, 401);
     assert.equal((await request("GET", publicInfoPath, 2)).status, 403);
-    assert.equal((await request("PUT", publicInfoPath, 2, { publicKey: "PUBLIC-A" })).status, 403);
-    assert.equal((await request("PUT", publicInfoPath, 3, { publicKey: "PUBLIC-A" })).status, 403);
-    assert.equal((await request("PUT", "/communities/999/signers/me/public-info", 1, { publicKey: "PUBLIC-A" })).status, 404);
+    assert.equal((await request("PUT", publicInfoPath, 2, { publicKey: validPublicKey(1) })).status, 403);
+    assert.equal((await request("PUT", publicInfoPath, 3, { publicKey: validPublicKey(1) })).status, 403);
+    assert.equal((await request("PUT", "/communities/999/signers/me/public-info", 1, { publicKey: validPublicKey(1) })).status, 404);
     assert.equal((await request("PUT", "/communities/nope/signers/me/public-info", 1, { publicKey: "PUBLIC-A" })).status, 400);
-    for (const publicKey of [undefined, "", "   ", 12, [], {}, "x".repeat(257)]) {
+    for (const publicKey of [undefined, "", "   ", 12, [], {}, "PUBLIC-A", `04${"11".repeat(64)}`, `02${"ff".repeat(32)}`, "x".repeat(257)]) {
       assert.equal((await request("PUT", publicInfoPath, 1, { publicKey })).status, 400);
     }
     for (const privateField of ["privateKey", "private_key", "seed", "seedPhrase", "seed_phrase", "mnemonic", "recoveryPhrase", "recovery_phrase", "WIF", "xprv"]) {
@@ -175,18 +185,25 @@ test("authorized signers are separate from community roles and scoped to members
     }
     assert.equal((await request("PUT", publicInfoPath, 1, { publicKey: "PUBLIC-A", nested: { privateKey: "secret-value" } })).status, 400);
     assert.equal(signers.find((signer) => signer.membershipId === 10).publicKey, null);
-    const registered = await request("PUT", publicInfoPath, 1, { publicKey: "  PUBLIC-A  " });
-    assert.deepEqual(registered, { status: 200, body: { registered: true, publicKey: "PUBLIC-A" } });
+    const firstKey = validPublicKey(1);
+    const secondKey = validPublicKey(2);
+    const registered = await request("PUT", publicInfoPath, 1, { publicKey: `  ${firstKey.toUpperCase()}  ` });
+    assert.deepEqual(registered, { status: 200, body: { registered: true, publicKey: firstKey } });
     assert.deepEqual(await request("GET", publicInfoPath, 1), registered);
-    assert.deepEqual(await request("PUT", publicInfoPath, 1, { publicKey: "PUBLIC-A" }), registered);
-    assert.deepEqual(await request("PUT", publicInfoPath, 1, { publicKey: "PUBLIC-B" }), {
-      status: 200, body: { registered: true, publicKey: "PUBLIC-B" },
+    assert.deepEqual(await request("PUT", publicInfoPath, 1, { publicKey: firstKey }), registered);
+    assert.deepEqual(await request("PUT", publicInfoPath, 1, { publicKey: secondKey }), {
+      status: 200, body: { registered: true, publicKey: secondKey },
     });
     assert.equal((await request("PUT", publicInfoPath, 1, { publicKey: "PUBLIC-C", seedPhrase: "secret-value" })).status, 400);
-    assert.equal((await request("GET", publicInfoPath, 1)).body.publicKey, "PUBLIC-B");
+    assert.equal((await request("GET", publicInfoPath, 1)).body.publicKey, secondKey);
     const listedWithInfo = await request("GET", path, 1);
     assert.equal(listedWithInfo.body.signers[0].publicInfoRegistered, true);
-    assert.equal(JSON.stringify(listedWithInfo.body).includes("PUBLIC-B"), false);
+    assert.equal(JSON.stringify(listedWithInfo.body).includes(secondKey), false);
+    assert.equal((await request("POST", path, 1, { userId: 2 })).status, 201);
+    assert.deepEqual(await request("PUT", publicInfoPath, 2, { publicKey: secondKey.toUpperCase() }), {
+      status: 409, body: { error: "Public key is already registered by another signer" },
+    });
+    assert.equal((await request("DELETE", `${path}/2`, 1)).status, 204);
     assert.deepEqual(await request("GET", "/communities/2/signers/me/public-info", 1), {
       status: 200, body: { registered: false, publicKey: null },
     });

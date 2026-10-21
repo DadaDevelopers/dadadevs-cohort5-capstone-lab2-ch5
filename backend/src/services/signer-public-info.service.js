@@ -1,4 +1,5 @@
 const prisma = require("../lib/prisma");
+const { normalizeCompressedPublicKey } = require("../lib/bitcoin-values");
 
 class PublicInfoError extends Error {
   constructor(status, message) {
@@ -22,13 +23,32 @@ async function currentSigner(userId, communityId) {
 
 async function getPublicInfo(userId, communityId) {
   const signer = await currentSigner(userId, communityId);
-  return { registered: Boolean(signer.publicKey), publicKey: signer.publicKey || null };
+  const publicKey = normalizeCompressedPublicKey(signer.publicKey);
+  return { registered: Boolean(publicKey), publicKey };
 }
 
 async function putPublicInfo(userId, communityId, publicKey) {
-  const signer = await currentSigner(userId, communityId);
-  const result = await prisma.authorizedSigner.updateMany({
-    where: { id: signer.id }, data: { publicKey },
+  const result = await prisma.$transaction(async (tx) => {
+    const community = await tx.$queryRaw`SELECT "id" FROM "Community" WHERE "id" = ${communityId} FOR UPDATE`;
+    if (!community.length) throw new PublicInfoError(404, "Community not found");
+    if (await tx.communityWallet.findUnique({ where: { communityId }, select: { id: true } })) {
+      throw new PublicInfoError(409, "Wallet signer keys are immutable; rotate to a new wallet");
+    }
+    const membership = await tx.communityMembership.findUnique({
+      where: { userId_communityId: { userId, communityId } },
+      select: { authorizedSigner: { select: { id: true } } },
+    });
+    if (!membership?.authorizedSigner) throw new PublicInfoError(403, "Forbidden");
+    const duplicate = await tx.authorizedSigner.findFirst({
+      where: {
+        id: { not: membership.authorizedSigner.id },
+        publicKey: { equals: publicKey, mode: "insensitive" },
+        membership: { is: { communityId } },
+      },
+      select: { id: true },
+    });
+    if (duplicate) throw new PublicInfoError(409, "Public key is already registered by another signer");
+    return tx.authorizedSigner.updateMany({ where: { id: membership.authorizedSigner.id }, data: { publicKey } });
   });
   if (result.count !== 1) throw new PublicInfoError(403, "Forbidden");
   return { registered: true, publicKey };

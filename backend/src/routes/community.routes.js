@@ -6,6 +6,7 @@ const memberController = require("../controllers/community-members.controller");
 const signerController = require("../controllers/community-signers.controller");
 const publicInfoController = require("../controllers/signer-public-info.controller");
 const thresholdController = require("../controllers/signing-threshold.controller");
+const walletController = require("../controllers/wallet.controller");
 
 const router = express.Router();
 
@@ -26,5 +27,17 @@ router.put("/:communityId/signers/me/public-info", authenticate, publicInfoContr
 router.get("/:communityId/signers/me/public-info", authenticate, publicInfoController.get);
 router.put("/:communityId/signing-threshold", authenticate, thresholdController.put);
 router.get("/:communityId/signing-threshold", authenticate, thresholdController.get);
+router.post("/:communityId/wallet", authenticate, walletController.create);
+router.get("/:communityId/wallet", authenticate, walletController.get);
+router.get("/:communityId/wallet/balance", authenticate, walletController.balance);
+router.get("/:communityId/wallet/utxos", authenticate, walletController.utxos);
+router.get("/:communityId/wallet/transactions", authenticate, walletController.transactions);
+router.get("/:communityId/wallet/transactions/:txid", authenticate, walletController.transaction);
+router.post("/:communityId/wallet/spends", authenticate, walletController.createSpend);
+router.get("/:communityId/wallet/spends/:spendId", authenticate, walletController.getSpend);
+router.get("/:communityId/wallet/spends/:spendId/psbt", authenticate, walletController.psbt);
+router.post("/:communityId/wallet/spends/:spendId/signatures", authenticate, walletController.sign);
+router.post("/:communityId/wallet/spends/:spendId/broadcast", authenticate, walletController.broadcast);
+router.post("/:communityId/wallet/spends/:spendId/cancel", authenticate, walletController.cancelSpend);
 
 module.exports = router;

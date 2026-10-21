@@ -1,4 +1,6 @@
-const MAX_PUBLIC_KEY_LENGTH = 256;
+const { normalizeCompressedPublicKey } = require("./bitcoin-values");
+
+const MAX_PUBLIC_KEY_LENGTH = 66;
 const PRIVATE_FIELDS = new Set([
   "privatekey", "seed", "seedphrase", "mnemonic", "recoveryphrase", "wif", "xprv", "xpriv", "secret",
 ]);
@@ -30,13 +32,11 @@ function validatePublicInfo(body) {
       Object.keys(body).length !== 1 || !Object.hasOwn(body, "publicKey")) {
     return { error: "Only publicKey is allowed" };
   }
-  if (typeof body.publicKey !== "string" || !body.publicKey.trim() ||
-      body.publicKey.trim().length > MAX_PUBLIC_KEY_LENGTH) {
-    return { error: "publicKey must be a nonempty string of at most 256 characters" };
-  }
-  const publicKey = body.publicKey.trim();
-  if (looksLikePrivateKey(publicKey)) return { error: PRIVATE_ERROR };
-  if (/\s/.test(publicKey)) return { error: "publicKey must not contain whitespace" };
+  if (typeof body.publicKey !== "string") return { error: "publicKey must be a valid compressed secp256k1 public key" };
+  const candidate = body.publicKey.trim();
+  if (looksLikePrivateKey(candidate)) return { error: PRIVATE_ERROR };
+  const publicKey = normalizeCompressedPublicKey(candidate);
+  if (!publicKey) return { error: "publicKey must be a valid compressed secp256k1 public key" };
   return { publicKey };
 }
 

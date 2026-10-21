@@ -1,4 +1,5 @@
 const prisma = require("../lib/prisma");
+const { normalizeCompressedPublicKey } = require("../lib/bitcoin-values");
 
 const { CommunityAccessError: SignerManagementError, membershipKey, requireMembership, asAdmin } = require("./community-access.service");
 const safeUser = { id: true, firstName: true, lastName: true, email: true };
@@ -16,13 +17,16 @@ function signerResponse(signer, membership) {
     email: membership.user.email,
     membershipRole: membership.role,
     isAuthorizedSigner: true,
-    publicInfoRegistered: Boolean(signer.publicKey),
+    publicInfoRegistered: Boolean(normalizeCompressedPublicKey(signer.publicKey)),
     createdAt: signer.createdAt,
   };
 }
 
 async function selectSigner(adminId, communityId, targetUserId) {
   return asAdmin(adminId, communityId, async (tx) => {
+    if (await tx.communityWallet.findUnique({ where: { communityId }, select: { id: true } })) {
+      throw new SignerManagementError(409, "Wallet signer configuration is immutable; rotate to a new wallet");
+    }
     const membership = await tx.communityMembership.findUnique({
       where: membershipKey(targetUserId, communityId),
       select: { id: true, role: true, user: { select: safeUser }, authorizedSigner: { select: { id: true } } },
@@ -53,6 +57,9 @@ async function listSigners(userId, communityId) {
 
 async function removeSigner(adminId, communityId, targetUserId) {
   return asAdmin(adminId, communityId, async (tx, community) => {
+    if (await tx.communityWallet.findUnique({ where: { communityId }, select: { id: true } })) {
+      throw new SignerManagementError(409, "Wallet signer configuration is immutable; rotate to a new wallet");
+    }
     const membership = await tx.communityMembership.findUnique({
       where: membershipKey(targetUserId, communityId),
       select: { authorizedSigner: { select: { id: true } } },
@@ -66,19 +73,20 @@ async function removeSigner(adminId, communityId, targetUserId) {
         throw new SignerManagementError(409, "Lower the signing threshold before removing this signer");
       }
     }
-    // Add the wallet lock here when wallet creation is implemented.
     await tx.authorizedSigner.delete({ where: { id: membership.authorizedSigner.id } });
   });
 }
 
 async function setSigningThreshold(adminId, communityId, requiredSignatures) {
   return asAdmin(adminId, communityId, async (tx) => {
+    if (await tx.communityWallet.findUnique({ where: { communityId }, select: { id: true } })) {
+      throw new SignerManagementError(409, "Wallet signing threshold is immutable; rotate to a new wallet");
+    }
     const count = await authorizedSignerCount(tx, communityId);
     if (count < 2) throw new SignerManagementError(409, "At least two authorized signers are required");
     if (requiredSignatures > count) {
       throw new SignerManagementError(409, "Signing threshold exceeds authorized signer count");
     }
-    // Once wallet state exists, reject threshold changes after wallet creation here.
     await tx.community.update({ where: { id: communityId }, data: { requiredSignatures } });
     return { requiredSignatures, authorizedSignerCount: count };
   });

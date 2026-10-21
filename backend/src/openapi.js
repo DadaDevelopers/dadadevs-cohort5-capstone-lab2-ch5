@@ -179,7 +179,7 @@ module.exports = {
     "/communities/{communityId}/signers/{userId}": {
       delete: {
         tags: ["Communities"], summary: "Remove an authorized signer", security: communitySecurity,
-        description: "Only a current community admin may remove signer authority. Membership remains. Removal is rejected if the remaining signer count would fall below the configured threshold. Once wallet creation is implemented, signer removal must also be locked after wallet creation.",
+        description: "Only a current community admin may remove signer authority. Membership remains. Removal is rejected if the remaining signer count would fall below the configured threshold, and signer changes are locked after wallet creation.",
         parameters: [communityIdParameter, { name: "userId", in: "path", required: true, schema: { type: "integer", minimum: 1, maximum: 2147483647 }, example: 2 }],
         responses: {
           204: { description: "Signer authority removed" },
@@ -191,13 +191,13 @@ module.exports = {
     "/communities/{communityId}/signers/me/public-info": {
       put: {
         tags: ["Communities"], summary: "Register or update my signer public information", security: communitySecurity,
-        description: "Only the current authorized signer may register public information for this community. Only public signing information belongs on the backend. Never submit private keys, mnemonic phrases, or seed phrases. The public-key format is not yet fixed; this endpoint trims the value, checks type and length, and rejects whitespace and recognizable private key material.",
+        description: "Only the current authorized signer may register their key. The value is normalized to lowercase and must be a valid 33-byte compressed secp256k1 public key beginning with 02 or 03. Keys must be distinct within the community. Never submit private keys, mnemonic phrases, or seed phrases. Key updates are locked after wallet creation.",
         parameters: [communityIdParameter],
-        requestBody: jsonBody({ type: "object", required: ["publicKey"], additionalProperties: false, properties: { publicKey: { type: "string", minLength: 1, maxLength: 256 } } }, { publicKey: "02FAKE_PUBLIC_KEY_EXAMPLE" }),
+        requestBody: jsonBody({ type: "object", required: ["publicKey"], additionalProperties: false, properties: { publicKey: { type: "string", minLength: 66, maxLength: 66, pattern: "^(02|03)[0-9a-fA-F]{64}$" } } }, { publicKey: "031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f" }),
         responses: {
-          200: { description: "Public information stored", content: { "application/json": { example: { registered: true, publicKey: "02FAKE_PUBLIC_KEY_EXAMPLE" } } } },
+          200: { description: "Validated public key stored", content: { "application/json": { example: { registered: true, publicKey: "031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f" } } } },
           400: errorResponse("Invalid input or private material submitted"), 401: communityErrors[401], 403: communityErrors[403],
-          404: communityErrors[404], 429: communityErrors[429], 500: communityErrors[500],
+          404: communityErrors[404], 409: errorResponse("Duplicate signer key or wallet policy is already immutable"), 429: communityErrors[429], 500: communityErrors[500],
         },
       },
       get: {
@@ -206,7 +206,7 @@ module.exports = {
         parameters: [communityIdParameter],
         responses: {
           200: { description: "Current registration status", content: { "application/json": { examples: {
-            registered: { value: { registered: true, publicKey: "02FAKE_PUBLIC_KEY_EXAMPLE" } },
+            registered: { value: { registered: true, publicKey: "031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f" } },
             pending: { value: { registered: false, publicKey: null } },
           } } } },
           400: communityErrors[400], 401: communityErrors[401], 403: communityErrors[403],
@@ -217,7 +217,7 @@ module.exports = {
     "/communities/{communityId}/signing-threshold": {
       put: {
         tags: ["Communities"], summary: "Set the multisig signing threshold", security: communitySecurity,
-        description: "Only a current COMMUNITY_ADMIN may set M. With 3 AuthorizedSigners and requiredSignatures 2, the future wallet would be 2-of-3. At least two signers are required; M must not exceed N. The threshold remains editable until wallet creation is implemented.",
+        description: "Only a current COMMUNITY_ADMIN may set M. With 3 AuthorizedSigners and requiredSignatures 2, the wallet is 2-of-3. At least two signers are required; M must not exceed N. The threshold is immutable after wallet creation.",
         parameters: [communityIdParameter],
         requestBody: jsonBody({ type: "object", required: ["requiredSignatures"], properties: { requiredSignatures: { type: "integer", minimum: 2, maximum: 2147483647 } } }, { requiredSignatures: 2 }),
         responses: {
@@ -302,6 +302,38 @@ module.exports = {
     },
   },
 };
+
+const walletPrefix = "/communities/{communityId}/wallet";
+const walletSecurity = [{ bearerAuth: [] }];
+const spendIdParameter = { name: "spendId", in: "path", required: true, schema: { type: "integer", minimum: 1, maximum: 2147483647 } };
+const txidParameter = { name: "txid", in: "path", required: true, schema: { type: "string", pattern: "^[0-9a-fA-F]{64}$" } };
+const walletResponse = (description) => ({ 200: { description }, 400: errorResponse("Invalid input"), 401: errorResponse("Unauthorized"), 403: errorResponse("Forbidden"), 404: errorResponse("Not found"), 409: errorResponse("Conflict"), 429: errorResponse("Rate limited"), 500: errorResponse("Internal server error"), 503: errorResponse("Bitcoin service unavailable") });
+const walletOperation = (summary, description, extra = {}) => ({ tags: ["Wallets"], summary, description, security: walletSecurity, parameters: [communityIdParameter], responses: walletResponse(description), ...extra });
+module.exports.tags.push({ name: "Wallets", description: "Regtest watch-only community wallets and externally signed PSBTs" });
+module.exports.paths[walletPrefix] = {
+  post: walletOperation("Create community wallet", "Admin only. Reads the configured threshold and every authorized signer key. All keys must be valid, registered and distinct before Bitcoin Core is contacted. The resulting signer policy is immutable. Retry a wallet in ERROR state.", { responses: { ...walletResponse("Wallet created"), 201: { description: "READY Regtest watch-only community wallet created" } } }),
+  get: walletOperation("Get community wallet", "Members can see the fixed receiving address and public descriptor."),
+};
+module.exports.paths[`${walletPrefix}/balance`] = { get: walletOperation("Get wallet balance", "Amounts are decimal strings in satoshis.") };
+module.exports.paths[`${walletPrefix}/utxos`] = { get: walletOperation("List wallet UTXOs", "Lists only outputs to this community wallet's address.") };
+module.exports.paths[`${walletPrefix}/transactions`] = { get: walletOperation("List wallet transactions", "Wallet-scoped transaction activity.") };
+module.exports.paths[`${walletPrefix}/transactions/{txid}`] = { get: walletOperation("Get transaction confirmations", "Wallet-scoped confirmation status.", { parameters: [communityIdParameter, txidParameter] }) };
+const spendBody = jsonBody({ type: "object", required: ["recipient", "amountSats", "feeRate"], properties: {
+  recipient: { type: "string" }, amountSats: { type: "string", pattern: "^[1-9][0-9]*$" }, feeRate: { type: "integer", minimum: 1, maximum: 100 },
+} }, { recipient: "bcrt1q...", amountSats: "100000", feeRate: 2 });
+module.exports.paths[`${walletPrefix}/spends`] = {
+  post: walletOperation("Create spending request", "Admin only. Reserves confirmed UTXOs and returns a request ID.", { requestBody: spendBody, responses: { ...walletResponse("Spending request created"), 201: { description: "Spending request created" } } }),
+};
+module.exports.paths[`${walletPrefix}/spends/{spendId}`] = { get: walletOperation("Get spending request", "Members can see recipient, satoshi amount, fee, status, required signatures and accepted signature records.", { parameters: [communityIdParameter, spendIdParameter] }) };
+module.exports.paths[`${walletPrefix}/spends/{spendId}/psbt`] = { get: walletOperation("Retrieve unsigned or partially signed PSBT", "Only original wallet signers may retrieve the PSBT for independent signing.", { parameters: [communityIdParameter, spendIdParameter] }) };
+module.exports.paths[`${walletPrefix}/spends/{spendId}/signatures`] = {
+  post: walletOperation("Submit externally signed PSBT", "Only original wallet signers. Transaction outputs, inputs, UTXO data, scripts, fee, SIGHASH_ALL policy, prior signatures and signer identity are verified before combining. Core-finalized threshold PSBTs are accepted only after every final-witness signature is verified.", {
+    parameters: [communityIdParameter, spendIdParameter],
+    requestBody: jsonBody({ type: "object", required: ["psbt"], properties: { psbt: { type: "string" } } }, { psbt: "cHNidP..." }),
+  }),
+};
+module.exports.paths[`${walletPrefix}/spends/{spendId}/broadcast`] = { post: walletOperation("Broadcast authorized transaction", "Admin only. Broadcasts a fully signed transaction and records its txid.", { parameters: [communityIdParameter, spendIdParameter] }) };
+module.exports.paths[`${walletPrefix}/spends/{spendId}/cancel`] = { post: walletOperation("Cancel spending request", "Admin only. Releases reserved inputs before broadcasting.", { parameters: [communityIdParameter, spendIdParameter] }) };
 
 // JSON parsing happens before controllers, so these errors apply to every request body.
 for (const [path, item] of Object.entries(module.exports.paths)) {

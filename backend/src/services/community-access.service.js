@@ -19,7 +19,7 @@ async function requireMembership(client, userId, communityId) {
   return membership;
 }
 
-async function asAdmin(userId, communityId, operation) {
+async function asAdmin(userId, communityId, operation, options) {
   return prisma.$transaction(async (tx) => {
     // Admin mutations take this lock before checking
     // permissions, so concurrent requests cannot remove the last admin or invalidate M-of-N.
@@ -30,7 +30,7 @@ async function asAdmin(userId, communityId, operation) {
     });
     if (requester?.role !== "COMMUNITY_ADMIN") throw new CommunityAccessError(403, "Forbidden");
     return operation(tx, rows[0]);
-  });
+  }, options);
 }
 
 module.exports = { CommunityAccessError, membershipKey, requireMembership, asAdmin };
