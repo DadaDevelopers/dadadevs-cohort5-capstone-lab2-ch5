@@ -21,14 +21,21 @@ model User {
   updatedAt    DateTime @updatedAt
   resetTokens  PasswordResetToken[]
   memberships CommunityMembership[]
+  createdSpends SpendingRequest[] @relation("SpendCreator")
 }
 
 model Community {
   id          Int                   @id @default(autoincrement())
+  // Case-insensitive uniqueness is enforced by Community_name_normalized_key
+  // in the SQL migration; Prisma cannot model expression indexes here.
   name        String
+  description String
+  joinCode    String                @unique
+  requiredSignatures Int?
   createdAt   DateTime              @default(now())
   updatedAt   DateTime              @updatedAt
   memberships CommunityMembership[]
+  wallet CommunityWallet?
 }
 
 model CommunityMembership {
@@ -49,8 +56,9 @@ model CommunityMembership {
 model AuthorizedSigner {
   id           Int                 @id @default(autoincrement())
   membershipId Int                 @unique
+  publicKey    String?
   createdAt    DateTime            @default(now())
-  membership   CommunityMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  membership   CommunityMembership @relation(fields: [membershipId], references: [id], onDelete: Restrict)
 }
 
 model PasswordResetToken {
@@ -63,4 +71,83 @@ model PasswordResetToken {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+enum WalletStatus {
+  CREATING
+  READY
+  ERROR
+}
+
+enum SpendingStatus {
+  SIGNING
+  READY
+  BROADCASTING
+  BROADCAST
+  CONFLICTED
+  CANCELLED
+}
+
+model CommunityWallet {
+  id Int @id @default(autoincrement())
+  communityId Int @unique
+  community Community @relation(fields: [communityId], references: [id], onDelete: Restrict)
+  status WalletStatus @default(CREATING)
+  network String @default("regtest")
+  coreWalletName String @unique
+  descriptor String
+  address String @unique
+  requiredSignatures Int
+  signerSnapshot Json
+  lastError String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  spends SpendingRequest[]
+  inputs SpendingInput[]
+}
+
+model SpendingRequest {
+  id Int @id @default(autoincrement())
+  walletId Int
+  wallet CommunityWallet @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  createdById Int
+  createdBy User @relation("SpendCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  recipient String
+  amountSats BigInt
+  feeSats BigInt
+  unsignedTxHash String
+  psbt String
+  status SpendingStatus @default(SIGNING)
+  txid String? @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  inputs SpendingInput[]
+  signatures SpendingSignature[]
+
+  @@index([walletId, status])
+}
+
+model SpendingInput {
+  id Int @id @default(autoincrement())
+  spendingRequestId Int
+  spendingRequest SpendingRequest @relation(fields: [spendingRequestId], references: [id], onDelete: Cascade)
+  walletId Int
+  wallet CommunityWallet @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  txid String
+  vout Int
+  reserved Boolean @default(true)
+
+  @@unique([spendingRequestId, txid, vout])
+  @@index([walletId, txid, vout])
+}
+
+model SpendingSignature {
+  id Int @id @default(autoincrement())
+  spendingRequestId Int
+  spendingRequest SpendingRequest @relation(fields: [spendingRequestId], references: [id], onDelete: Cascade)
+  signerId Int
+  publicKey String
+  createdAt DateTime @default(now())
+
+  @@unique([spendingRequestId, signerId])
 }

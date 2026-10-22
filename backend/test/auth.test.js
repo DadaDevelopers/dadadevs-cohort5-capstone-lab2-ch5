@@ -101,16 +101,20 @@ test("authentication, authorization, reset, rate limits and docs", async () => {
     result = await request("/auth/refresh", "POST", { refreshToken });
     assert.equal(result.status, 200);
     assert.ok(result.body.token);
-    let resetToken;
+    const resetToken = "a".repeat(64);
     const originalLog = console.log;
-    console.log = (message) => { resetToken = message.split(": ")[1]; };
+    const originalRandomBytes = crypto.randomBytes;
+    const logs = [];
+    crypto.randomBytes = () => Buffer.from(resetToken, "hex");
+    console.log = (...values) => logs.push(values);
     try {
       result = await request("/auth/forgot-password", "POST", { email: "ada@example.com" });
       assert.equal(result.status, 200);
     } finally {
       console.log = originalLog;
+      crypto.randomBytes = originalRandomBytes;
     }
-    assert.ok(resetToken);
+    assert.deepEqual(logs, []);
     const unknown = await request("/auth/forgot-password", "POST", { email: "nobody@example.com" });
     assert.deepEqual(unknown.body, result.body);
     result = await request("/auth/reset-password", "POST", { token: resetToken, newPassword: "newpassword123" });
