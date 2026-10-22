@@ -1,0 +1,101 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-ink: #0e1a18;
+  --color-ink-soft: #33403c;
+  --color-muted: #5b6662;
+  --color-faint: #8a928f;
+  --color-paper: #f6f5f1;
+  --color-surface: #ffffff;
+  --color-sunken: #efeee9;
+  --color-line: #dad9d3;
+  --color-line-strong: #b5b4ad;
+
+  --color-forest: #063a33;
+  --color-forest-2: #0b4a41;
+  --color-night: #01191a;
+
+  --color-accent: #e8661c;
+  --color-accent-hover: #cf5612;
+  --color-accent-ink: #a8470c;
+
+  /* Waiting / pending: muted peach from the Figma status chips */
+  --color-wait: #fbe4d3;
+  --color-wait-line: #f0bf9c;
+  --color-wait-ink: #8a3f10;
+
+  --color-ok: #d6f1d1;
+  --color-ok-line: #9fd896;
+  --color-ok-ink: #1d6a23;
+
+  --color-bad: #fbe1de;
+  --color-bad-line: #eda69f;
+  --color-bad-ink: #9f2219;
+
+  --color-teal: #cdeeea;
+  --color-teal-soft: #eef8f7;
+  --color-teal-line: #8fd3cb;
+  --color-teal-ink: #0d5a52;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-paper text-ink font-sans antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+  h1,
+  h2,
+  h3 {
+    @apply tracking-tight;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Diagonal hatching used for declined signer slots */
+@utility hatch {
+  background-image: repeating-linear-gradient(135deg, transparent 0 5px, var(--color-line-strong) 5px 6px);
+}
+
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+@utility skeleton {
+  background: linear-gradient(90deg, var(--color-sunken) 0, #f8f7f3 50%, var(--color-sunken) 100%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+@keyframes slot-in {
+  0% { transform: scale(0.6); opacity: 0; }
+  60% { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); }
+}
+
+@utility slot-pop {
+  animation: slot-in 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
