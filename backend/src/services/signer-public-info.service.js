@@ -1,5 +1,6 @@
 const prisma = require("../lib/prisma");
 const { normalizeCompressedPublicKey } = require("../lib/bitcoin-values");
+const { recordEvent } = require("./domain-events.service");
 
 class PublicInfoError extends Error {
   constructor(status, message) {
@@ -48,7 +49,14 @@ async function putPublicInfo(userId, communityId, publicKey) {
       select: { id: true },
     });
     if (duplicate) throw new PublicInfoError(409, "Public key is already registered by another signer");
-    return tx.authorizedSigner.updateMany({ where: { id: membership.authorizedSigner.id }, data: { publicKey } });
+    const updated = await tx.authorizedSigner.updateMany({ where: { id: membership.authorizedSigner.id }, data: { publicKey } });
+    if (updated.count === 1) {
+      await recordEvent(tx, {
+        communityId, actorUserId: userId, eventType: "SIGNER_KEY_REGISTERED", entityType: "signer", entityId: membership.authorizedSigner.id,
+        notification: { audience: "admins", category: "signer", message: "A signer registered their public key." },
+      });
+    }
+    return updated;
   });
   if (result.count !== 1) throw new PublicInfoError(403, "Forbidden");
   return { registered: true, publicKey };

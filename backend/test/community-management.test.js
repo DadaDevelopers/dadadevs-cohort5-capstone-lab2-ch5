@@ -134,7 +134,7 @@ test("community MVP endpoints and safe projections", async () => {
     assert.equal(second.status, 201);
     assert.notEqual(second.body.community.joinCode, joinCode);
     const list = await request("GET", "/communities", undefined, 2);
-    assert.deepEqual(list.body.communities, [{ id, name: "Dada Community Fund", description, role: "COMMUNITY_MEMBER" }]);
+    assert.deepEqual(list.body.communities, [{ id, name: "Dada Community Fund", description, role: "COMMUNITY_MEMBER", setupStage: "members" }]);
     const memberView = await request("GET", `/communities/${id}`, undefined, 2);
     assert.equal(memberView.body.community.role, "COMMUNITY_MEMBER");
     assert.equal(memberView.body.community.description, description);

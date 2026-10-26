@@ -2,8 +2,8 @@ import { QRCodeSVG } from 'qrcode.react'
 import { useLocation } from 'react-router-dom'
 import * as api from '../api'
 import { Icon } from '../components/Icon'
-import { ConfirmationBadge } from '../components/StatusBadge'
-import { Amount, ButtonLink, CopyField, EmptyState, ErrorState, KeyValue, LoadingBlock, Notice, PageHeader, Panel, Skeleton } from '../components/ui'
+import { ConfirmationBadge, NetworkBadge } from '../components/StatusBadge'
+import { Amount, BitcoinAmount, Button, ButtonLink, CopyField, EmptyState, ErrorState, KeyValue, LoadingBlock, Notice, PageHeader, Panel, Skeleton } from '../components/ui'
 import { useActiveCommunity } from '../context/CommunityContext'
 import { date, dateTime, sats, shortHash } from '../lib/format'
 import { confirmationText } from '../lib/status'
@@ -16,11 +16,14 @@ export default function WalletPage() {
   const { community, membership } = useActiveCommunity()
   const wallet = useAsync(() => api.getWallet(community.id), [community.id])
   const contributions = useAsync(() => api.listContributions(community.id), [community.id])
+  const requests = useAsync(() => api.listSpendingRequests(community.id), [community.id])
 
   const w = wallet.data
+  const reserved = requests.data ? api.reservedByRequests(requests.data) : null
   const reload = () => {
     wallet.reload()
     contributions.reload()
+    requests.reload()
   }
 
   return (
@@ -28,12 +31,11 @@ export default function WalletPage() {
       <PageHeader
         title="Wallet"
         description="The community’s shared Bitcoin wallet. Anyone can send money in. Money only goes out with the approval rule."
+        eyebrow={w ? <NetworkBadge network={w.network} /> : undefined}
         actions={
           <>
-            <button type="button" onClick={reload} className="inline-flex h-11 items-center gap-2 border border-line-strong bg-surface px-4 text-[15px] font-semibold hover:bg-sunken">
-              <Icon name="refresh" size={18} /> Refresh
-            </button>
-            {membership.isSigner && (
+            <Button type="button" onClick={reload} variant="secondary" icon="refresh">Refresh</Button>
+            {membership.isAdmin && (
               <ButtonLink to="/app/requests/new" icon="send">
                 Propose a payment
               </ButtonLink>
@@ -56,29 +58,27 @@ export default function WalletPage() {
           <Skeleton className="h-64 lg:col-span-3" />
         </div>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-5">
-          <section className="flex flex-col border border-line bg-surface lg:col-span-2">
+        <div className="grid gap-6 lg:grid-cols-12">
+          <section className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-line bg-surface lg:col-span-5">
             <div className="flex items-center gap-4 border-b border-line p-6">
-              <span className="flex h-14 w-14 shrink-0 items-center justify-center bg-accent text-2xl font-extrabold text-white" aria-hidden="true">
+              <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-forest text-2xl font-extrabold text-white" aria-hidden="true">
                 ₿
               </span>
-              <div>
-                <p className="text-sm font-semibold text-muted">Balance</p>
-                <p className="text-3xl font-extrabold leading-tight">
-                  <Amount sats={w.confirmedBalanceSats} />
-                </p>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-muted">Confirmed balance</p>
+                <BitcoinAmount sats={w.confirmedBalanceSats} className="mt-2" />
                 <p className="text-sm tabular text-muted">{sats(w.confirmedBalanceSats)}</p>
               </div>
             </div>
-            <dl className="grid grid-cols-2 gap-5 p-6">
-              <KeyValue label="Free to spend">
-                <Amount sats={w.confirmedBalanceSats - w.reservedSats} className="font-semibold" />
+            <dl className="grid gap-5 p-6 sm:grid-cols-2">
+              <KeyValue label="Available to spend">
+                {reserved === null ? <span className="text-muted">Loading…</span> : <BitcoinAmount sats={Math.max(0, w.confirmedBalanceSats - reserved)} size="compact" />}
               </KeyValue>
-              <KeyValue label="Held for open requests">
-                <Amount sats={w.reservedSats} className="font-semibold" />
+              <KeyValue label="Reserved for open requests">
+                {reserved === null ? <span className="text-muted">Loading…</span> : <BitcoinAmount sats={reserved} size="compact" />}
               </KeyValue>
               <KeyValue label="Arriving (unconfirmed)">
-                <Amount sats={w.unconfirmedIncomingSats} className="font-semibold" />
+                <BitcoinAmount sats={w.unconfirmedIncomingSats} size="compact" />
               </KeyValue>
               <KeyValue label="Approval rule">
                 <span className="font-semibold">{w.threshold} of {w.signerCount} signers</span>
@@ -91,13 +91,13 @@ export default function WalletPage() {
             {!membership.isSigner && (
               <p className="mt-auto border-t border-line px-6 py-4 text-sm text-ink-soft">
                 {membership.isAdmin
-                  ? 'You are not in the signer set, so you cannot propose or approve payments. That is by design.'
-                  : 'Only authorised signers can propose or approve payments. You can see every movement of funds.'}
+                  ? 'You can create payments as administrator, but only wallet signers can add Bitcoin signatures.'
+                  : 'Only administrators can create payments and only authorised signers can sign them. You can see every movement of funds.'}
               </p>
             )}
           </section>
 
-          <section className="border border-line bg-surface lg:col-span-3" aria-labelledby="receive-heading">
+          <section className="overflow-hidden rounded-xl border border-line bg-surface lg:col-span-7" aria-labelledby="receive-heading">
             <div className="flex items-center gap-2 border-b border-line px-6 py-4">
               <Icon name="receive" size={20} />
               <h2 id="receive-heading" className="text-[17px] font-bold">Receive Bitcoin</h2>
@@ -109,10 +109,10 @@ export default function WalletPage() {
                   <p className="text-[15px] leading-relaxed text-ink-soft">
                     Anyone can send test Bitcoin to this address. It belongs to the whole community: spending from it needs {w.threshold} of the {w.signerCount} signers.
                   </p>
-                  <Notice tone="warn">This is a regtest address. Do not send real Bitcoin to it; it would be lost.</Notice>
+                  <Notice tone="warn">This is a {w.network === 'regtest' ? 'Regtest' : 'Signet'} test address. Test coins have no monetary value. Do not send real Bitcoin to it; it would be lost.</Notice>
                 </div>
-                <div className="flex flex-col items-center gap-2 self-start border border-line p-3">
-                  <QRCodeSVG value={`bitcoin:${w.receiveAddress.toUpperCase()}`} size={168} level="M" marginSize={1} title="QR code of the community receiving address" />
+                <div className="flex shrink-0 flex-col items-center gap-2 self-start rounded-xl border border-line bg-white p-3">
+                  <QRCodeSVG value={`bitcoin:${w.receiveAddress}`} size={168} level="M" marginSize={1} title="QR code of the community receiving address" />
                   <span className="text-xs text-muted">Scan to pay</span>
                 </div>
               </div>
@@ -144,8 +144,8 @@ export default function WalletPage() {
           <ul>
             {(contributions.data ?? []).map((c) => (
               <li key={c.id}>
-                <Link to={`/app/transactions/${c.txid}`} className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2 border-b border-line px-5 py-4 last:border-b-0 hover:bg-paper sm:grid-cols-[auto_1fr_auto_auto]">
-                  <span className="flex h-10 w-10 items-center justify-center bg-ok text-ok-ink">
+                <Link to={`/app/transactions/${c.txid}`} className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-3 border-b border-line px-5 py-4 last:border-b-0 hover:bg-paper sm:grid-cols-[auto_minmax(0,1fr)_auto_auto]">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-ok text-ok-ink">
                     <Icon name="arrowDownLeft" size={20} />
                   </span>
                   <span className="min-w-0">
@@ -154,10 +154,10 @@ export default function WalletPage() {
                       {dateTime(c.receivedAt)} · <span className="font-mono">{shortHash(c.txid, 8, 6)}</span>
                     </span>
                   </span>
-                  <span className="col-start-2 sm:col-start-auto">
+                  <span className="col-start-2 justify-self-end text-right sm:col-start-auto">
                     <Amount sats={c.amountSats} sign="+" className="font-bold text-ok-ink" />
                   </span>
-                  <span className="col-start-2 flex flex-col items-start gap-1 sm:col-start-auto sm:items-end">
+                  <span className="col-start-2 flex flex-col items-start gap-1 justify-self-end text-right sm:col-start-auto sm:items-end">
                     <ConfirmationBadge confirmations={c.confirmations} />
                     <span className="text-xs text-muted">{confirmationText(c.confirmations)}</span>
                   </span>
@@ -167,7 +167,7 @@ export default function WalletPage() {
           </ul>
         )}
       </Panel>
-      <p className="text-sm text-muted">A new regtest block is simulated every minute, so confirmations increase while you watch. Use Refresh to update.</p>
+      <p className="text-sm text-muted">Balances come from the configured Bitcoin Core {w?.network === 'signet' ? 'Signet' : 'Regtest'} wallet. Use Refresh after mining or receiving a transaction.</p>
     </div>
   )
 }

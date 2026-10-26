@@ -12,7 +12,6 @@ import { StepHeader } from './Setup'
 
 function AddMemberForm({ communityId, onAdded }: { communityId: string; onAdded: (m: CommunityMember) => void }) {
   const [open, setOpen] = useState(false)
-  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
@@ -22,17 +21,15 @@ function AddMemberForm({ communityId, onAdded }: { communityId: string; onAdded:
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     const next: Record<string, string> = {}
-    if (name.trim().length < 2) next.name = 'Enter the member’s full name.'
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) next.email = 'Enter a valid email address, like name@example.org.'
     setErrors(next)
     if (Object.keys(next).length) return
     setBusy(true)
     setFormError(null)
     try {
-      const m = await api.addMember(communityId, { name, email })
+      const m = await api.addMember(communityId, { email })
       onAdded(m)
       setAdded(m.name)
-      setName('')
       setEmail('')
     } catch (err) {
       if (err instanceof ApiError) setErrors(err.fields)
@@ -55,7 +52,7 @@ function AddMemberForm({ communityId, onAdded }: { communityId: string; onAdded:
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-bold">Add a member</h2>
-          <p className="mt-0.5 text-sm text-muted">New members can see the balance and history. They cannot sign unless chosen as a signer before the wallet is created.</p>
+          <p className="mt-0.5 text-sm text-muted">Enter the email address of an existing CommunitySafe account. Membership does not automatically grant signing authority.</p>
         </div>
         <button type="button" onClick={() => setOpen(false)} className="p-1.5 hover:bg-sunken" aria-label="Close add member form">
           <Icon name="x" size={20} />
@@ -63,8 +60,7 @@ function AddMemberForm({ communityId, onAdded }: { communityId: string; onAdded:
       </div>
       {formError && <Notice tone="bad" className="mt-4">{formError}</Notice>}
       {added && !formError && <Notice tone="ok" className="mt-4">{added} was added to the community.</Notice>}
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <TextField label="Full name" value={name} onChange={(e) => setName(e.target.value)} error={errors.name} placeholder="e.g. Wanjiru Kamau" />
+      <div className="mt-4">
         <TextField label="Email address" type="email" value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} placeholder="name@example.org" />
       </div>
       <div className="mt-4 flex justify-end">
@@ -89,6 +85,8 @@ export default function Members({ mode = 'app' }: { mode?: 'app' | 'setup' }) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [memberActionError, setMemberActionError] = useState<string | null>(null)
+  const [actingOn, setActingOn] = useState<string | null>(null)
 
   const members: CommunityMember[] = useMemo(() => data.data?.[0] ?? [], [data.data])
   const signers: AuthorisedSigner[] = useMemo(() => data.data?.[1] ?? [], [data.data])
@@ -133,6 +131,33 @@ export default function Members({ mode = 'app' }: { mode?: 'app' | 'setup' }) {
     }
   }
 
+  const changeRole = async (member: CommunityMember, isAdmin: boolean) => {
+    setActingOn(member.id)
+    setMemberActionError(null)
+    try {
+      await api.changeMemberRole(cid, member.userId, isAdmin)
+      await Promise.all([data.reload(), refresh()])
+    } catch (err) {
+      setMemberActionError(errorMessage(err))
+    } finally {
+      setActingOn(null)
+    }
+  }
+
+  const remove = async (member: CommunityMember) => {
+    if (!window.confirm(`Remove ${member.name} from this community?`)) return
+    setActingOn(member.id)
+    setMemberActionError(null)
+    try {
+      await api.removeMember(cid, member.userId)
+      await data.reload()
+    } catch (err) {
+      setMemberActionError(errorMessage(err))
+    } finally {
+      setActingOn(null)
+    }
+  }
+
   const header =
     mode === 'setup' ? (
       <StepHeader
@@ -168,6 +193,8 @@ export default function Members({ mode = 'app' }: { mode?: 'app' | 'setup' }) {
           A change would need a new wallet, which this version does not support.
         </Notice>
       )}
+
+      {memberActionError && <Notice tone="bad">{memberActionError}</Notice>}
 
       <div className="relative">
         <Icon name="search" size={18} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />
@@ -208,8 +235,9 @@ export default function Members({ mode = 'app' }: { mode?: 'app' | 'setup' }) {
                     <p className="truncate text-sm text-muted">{m.email}</p>
                   </div>
                 </div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 {canPickSigners ? (
-                  <label className="flex items-center gap-2 text-sm font-semibold sm:w-56">
+                  <label className="flex items-center gap-2 text-sm font-semibold sm:w-52">
                     <span className="sr-only">Role for {m.name}</span>
                     <select
                       value={isSigner ? 'signer' : 'member'}
@@ -225,6 +253,22 @@ export default function Members({ mode = 'app' }: { mode?: 'app' | 'setup' }) {
                 ) : (
                   <Badge tone="neutral">Member</Badge>
                 )}
+                {membership.isAdmin && !isYou && (
+                  <>
+                    <select
+                      aria-label={`Membership role for ${m.name}`}
+                      value={m.isAdmin ? 'admin' : 'member'}
+                      disabled={actingOn === m.id}
+                      onChange={(event) => void changeRole(m, event.target.value === 'admin')}
+                      className="h-11 border border-line-strong bg-surface px-3 text-sm font-semibold outline-none focus:border-ink"
+                    >
+                      <option value="member">Member access</option>
+                      <option value="admin">Administrator</option>
+                    </select>
+                    <Button variant="ghost" size="sm" busy={actingOn === m.id} onClick={() => void remove(m)}>Remove</Button>
+                  </>
+                )}
+                </div>
               </li>
             )
           })}

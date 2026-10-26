@@ -8,7 +8,7 @@ process.env.JWT_SECRET = "test-access-secret";
 process.env.JWT_EXPIRES_IN = "1h";
 process.env.REFRESH_TOKEN_SECRET = "test-refresh-secret";
 process.env.REFRESH_TOKEN_EXPIRES_IN = "7d";
-process.env.NODE_ENV = "development";
+process.env.NODE_ENV = "test";
 
 let user;
 const resetTokens = [];
@@ -141,16 +141,18 @@ test("authentication, authorization, reset, rate limits and docs", async () => {
     });
     assert.equal(preflight.status, 204);
     assert.match(preflight.headers.get("access-control-allow-headers"), /Authorization/);
+    assert.match(corsResponse.headers.get("access-control-expose-headers"), /Retry-After/);
 
     for (let i = 0; i < 5; i += 1) {
       assert.equal((await request("/auth/login", "POST", { email: "locked@example.com", password: "wrong" })).status, 401);
     }
-    assert.equal((await request("/auth/login", "POST", { email: "locked@example.com", password: "wrong" })).status, 429);
-    let rateLimited = false;
-    for (let i = 0; i < 35; i += 1) {
-      if ((await request("/auth/me")).status === 429) rateLimited = true;
+    const locked = await request("/auth/login", "POST", { email: "locked@example.com", password: "wrong" });
+    assert.equal(locked.status, 429);
+    assert.ok(Number(locked.headers.get("retry-after")) > 0);
+    // Routine session reads no longer share the small public-auth bucket.
+    for (let i = 0; i < 40; i += 1) {
+      assert.notEqual((await request("/auth/me", "GET", undefined, { Authorization: `Bearer ${token}` })).status, 429);
     }
-    assert.equal(rateLimited, true);
   } finally {
     server.close();
   }

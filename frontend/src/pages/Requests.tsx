@@ -17,7 +17,7 @@ const FILTERS: { value: Filter; label: string }[] = [
   { value: 'ready_to_broadcast', label: 'Ready to send' },
   { value: 'broadcast', label: 'Sent' },
   { value: 'failed', label: 'Failed' },
-  { value: 'rejected', label: 'Declined' },
+  { value: 'cancelled', label: 'Cancelled' },
 ]
 
 const EMPTY_TEXT: Record<Filter, string> = {
@@ -27,7 +27,8 @@ const EMPTY_TEXT: Record<Filter, string> = {
   ready_to_broadcast: 'No fully signed requests are waiting to be sent.',
   broadcast: 'Nothing has been sent from the wallet yet.',
   failed: 'No sends have failed. Good.',
-  rejected: 'No requests have been declined.',
+  rejected: 'Decline tracking is not supported by the current backend.',
+  cancelled: 'No requests have been cancelled.',
 }
 
 export default function Requests() {
@@ -47,7 +48,7 @@ export default function Requests() {
         title="Spending requests"
         description="Every proposed payment, who proposed it and how many signers have approved it."
         actions={
-          membership.isSigner ? (
+          membership.isAdmin ? (
             <ButtonLink to="/app/requests/new" icon="plus">
               New request
             </ButtonLink>
@@ -55,11 +56,9 @@ export default function Requests() {
         }
       />
 
-      {!membership.isSigner && (
+      {!membership.isAdmin && (
         <Notice tone="info">
-          {membership.isAdmin
-            ? 'Only authorised signers can propose payments. As administrator you are not in the signer set, so you can review requests but not create or sign them.'
-            : 'Only authorised signers can propose or sign payments. You can open any request to see its details and who has signed.'}
+          Only community administrators can create or cancel payments. Authorised wallet signers separately provide Bitcoin signatures.
         </Notice>
       )}
 
@@ -90,7 +89,7 @@ export default function Requests() {
       ) : shown.length === 0 ? (
         <EmptyState
           title={filter === 'all' ? 'No spending requests yet' : `Nothing under “${FILTERS.find((f) => f.value === filter)?.label}”`}
-          action={membership.isSigner && filter === 'all' ? <ButtonLink to="/app/requests/new" icon="plus" size="sm">New request</ButtonLink> : undefined}
+          action={membership.isAdmin && filter === 'all' ? <ButtonLink to="/app/requests/new" icon="plus" size="sm">New request</ButtonLink> : undefined}
         >
           {EMPTY_TEXT[filter]}
         </EmptyState>

@@ -22,6 +22,9 @@ model User {
   resetTokens  PasswordResetToken[]
   memberships CommunityMembership[]
   createdSpends SpendingRequest[] @relation("SpendCreator")
+  auditEvents AuditEvent[] @relation("AuditActor")
+  notifications Notification[]
+  discussionMessages DiscussionMessage[]
 }
 
 model Community {
@@ -36,6 +39,9 @@ model Community {
   updatedAt   DateTime              @updatedAt
   memberships CommunityMembership[]
   wallet CommunityWallet?
+  auditEvents AuditEvent[]
+  notifications Notification[]
+  discussionMessages DiscussionMessage[]
 }
 
 model CommunityMembership {
@@ -123,8 +129,62 @@ model SpendingRequest {
   updatedAt DateTime @updatedAt
   inputs SpendingInput[]
   signatures SpendingSignature[]
+  discussionMessages DiscussionMessage[]
 
   @@index([walletId, status])
+}
+
+model AuditEvent {
+  id Int @id @default(autoincrement())
+  communityId Int
+  community Community @relation(fields: [communityId], references: [id], onDelete: Restrict)
+  actorUserId Int?
+  actor User? @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  eventType String
+  entityType String
+  entityId String
+  metadata Json?
+  dedupeKey String? @unique
+  createdAt DateTime @default(now())
+  notifications Notification[]
+
+  @@index([communityId, createdAt, id])
+  @@index([communityId, eventType, createdAt, id])
+}
+
+model Notification {
+  id Int @id @default(autoincrement())
+  userId Int
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  communityId Int
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  auditEventId Int
+  auditEvent AuditEvent @relation(fields: [auditEventId], references: [id], onDelete: Cascade)
+  category String
+  message String
+  entityType String
+  entityId String
+  createdAt DateTime @default(now())
+  readAt DateTime?
+
+  @@unique([auditEventId, userId])
+  @@index([userId, communityId, createdAt, id])
+  @@index([userId, communityId, readAt])
+}
+
+model DiscussionMessage {
+  id Int @id @default(autoincrement())
+  communityId Int
+  community Community @relation(fields: [communityId], references: [id], onDelete: Restrict)
+  spendingRequestId Int
+  spendingRequest SpendingRequest @relation(fields: [spendingRequestId], references: [id], onDelete: Restrict)
+  authorUserId Int
+  author User @relation(fields: [authorUserId], references: [id], onDelete: Restrict)
+  body String
+  createdAt DateTime @default(now())
+
+  @@index([spendingRequestId, createdAt, id])
+  @@index([communityId, createdAt, id])
 }
 
 model SpendingInput {

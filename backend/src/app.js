@@ -9,9 +9,16 @@ const logError = require("./lib/log-error");
 
 const app = express();
 
+if (process.env.TRUST_PROXY) {
+  const hops = Number(process.env.TRUST_PROXY);
+  if (!Number.isSafeInteger(hops) || hops < 0) throw new Error("TRUST_PROXY must be a non-negative integer hop count");
+  app.set("trust proxy", hops);
+}
+
 app.use(cors({
   origin: process.env.FRONTEND_ORIGIN || "http://localhost:5173",
   allowedHeaders: ["Authorization", "Content-Type"],
+  exposedHeaders: ["Retry-After", "RateLimit", "RateLimit-Policy"],
 }));
 app.use(express.json());
 app.use("/auth", authRoutes);

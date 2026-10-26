@@ -79,7 +79,7 @@ module.exports = {
       get: {
         tags: ["Communities"], summary: "List my communities", security: communitySecurity,
         responses: {
-          200: { description: "Only current memberships; join codes are omitted", content: { "application/json": { example: { communities: [{ id: 1, name: "Dada Community Fund", description: "A community savings group for shared Bitcoin contributions.", role: "COMMUNITY_ADMIN" }] } } } },
+          200: { description: "Only current memberships; join codes are omitted. setupStage is the next authorized onboarding destination, or active for a ready wallet.", content: { "application/json": { example: { communities: [{ id: 1, name: "Dada Community Fund", description: "A community savings group for shared Bitcoin contributions.", role: "COMMUNITY_ADMIN", setupStage: "active" }] } } } },
           401: communityErrors[401], 429: communityErrors[429], 500: communityErrors[500],
         },
       },
@@ -316,12 +316,13 @@ module.exports.paths[walletPrefix] = {
 };
 module.exports.paths[`${walletPrefix}/balance`] = { get: walletOperation("Get wallet balance", "Amounts are decimal strings in satoshis.") };
 module.exports.paths[`${walletPrefix}/utxos`] = { get: walletOperation("List wallet UTXOs", "Lists only outputs to this community wallet's address.") };
-module.exports.paths[`${walletPrefix}/transactions`] = { get: walletOperation("List wallet transactions", "Wallet-scoped transaction activity.") };
-module.exports.paths[`${walletPrefix}/transactions/{txid}`] = { get: walletOperation("Get transaction confirmations", "Wallet-scoped confirmation status.", { parameters: [communityIdParameter, txidParameter] }) };
+module.exports.paths[`${walletPrefix}/transactions`] = { get: walletOperation("List wallet transactions", "One logical entry per wallet transaction. Bitcoin Core's per-output ledger lines are grouped by transaction ID and wallet ownership: external recipient outputs form the payment amount, wallet-owned change is reported separately, and wallet sends without a stored request remain outgoing with a null requestId. Amounts are integer satoshi strings.") };
+module.exports.paths[`${walletPrefix}/transactions/{txid}`] = { get: walletOperation("Get logical wallet transaction", "Uses the same aggregation as the list endpoint. Returns direction, external amount, fee, change, total wallet debit, recipients, confirmations, block hash and actual block height when Bitcoin Core provides it. Unconfirmed transactions have no block height.", { parameters: [communityIdParameter, txidParameter] }) };
 const spendBody = jsonBody({ type: "object", required: ["recipient", "amountSats", "feeRate"], properties: {
   recipient: { type: "string" }, amountSats: { type: "string", pattern: "^[1-9][0-9]*$" }, feeRate: { type: "integer", minimum: 1, maximum: 100 },
 } }, { recipient: "bcrt1q...", amountSats: "100000", feeRate: 2 });
 module.exports.paths[`${walletPrefix}/spends`] = {
+  get: walletOperation("List spending requests", "Members can list safe request projections ordered newest first. Responses include creator, exact satoshi strings, status and signature records, but never include PSBT data."),
   post: walletOperation("Create spending request", "Admin only. Reserves confirmed UTXOs and returns a request ID.", { requestBody: spendBody, responses: { ...walletResponse("Spending request created"), 201: { description: "Spending request created" } } }),
 };
 module.exports.paths[`${walletPrefix}/spends/{spendId}`] = { get: walletOperation("Get spending request", "Members can see recipient, satoshi amount, fee, status, required signatures and accepted signature records.", { parameters: [communityIdParameter, spendIdParameter] }) };
@@ -334,6 +335,36 @@ module.exports.paths[`${walletPrefix}/spends/{spendId}/signatures`] = {
 };
 module.exports.paths[`${walletPrefix}/spends/{spendId}/broadcast`] = { post: walletOperation("Broadcast authorized transaction", "Admin only. Broadcasts a fully signed transaction and records its txid.", { parameters: [communityIdParameter, spendIdParameter] }) };
 module.exports.paths[`${walletPrefix}/spends/{spendId}/cancel`] = { post: walletOperation("Cancel spending request", "Admin only. Releases reserved inputs before broadcasting.", { parameters: [communityIdParameter, spendIdParameter] }) };
+
+const activityOperation = (summary, description, extra = {}) => ({
+  tags: ["Activity"], summary, description, security: walletSecurity,
+  parameters: [communityIdParameter], responses: walletResponse(description), ...extra,
+});
+const notificationIdParameter = { name: "notificationId", in: "path", required: true, schema: { type: "integer", minimum: 1, maximum: 2147483647 } };
+module.exports.tags.push({ name: "Activity", description: "Community audit history, user notifications and spending discussions" });
+module.exports.paths["/communities/{communityId}/audit-events"] = {
+  get: activityOperation("List community audit events", "Member-only, newest-first, cursor-paginated immutable event history. Optional type filter."),
+};
+module.exports.paths["/communities/{communityId}/notifications"] = {
+  get: activityOperation("List my notifications", "Returns only the authenticated member's notifications in this community, newest first."),
+};
+module.exports.paths["/communities/{communityId}/notifications/unread-count"] = {
+  get: activityOperation("Count my unread notifications", "Lightweight unread count for the application header."),
+};
+module.exports.paths["/communities/{communityId}/notifications/{notificationId}/read"] = {
+  patch: activityOperation("Mark my notification read", "A user can mark only their own notification in the selected community.", { parameters: [communityIdParameter, notificationIdParameter] }),
+};
+module.exports.paths["/communities/{communityId}/notifications/read-all"] = {
+  post: activityOperation("Mark all my notifications read", "Marks unread notifications for the authenticated user in this community."),
+};
+module.exports.paths[`${walletPrefix}/spends/{spendId}/discussion`] = {
+  get: activityOperation("List spending request discussion", "Members can read retained discussion messages in chronological order.", { parameters: [communityIdParameter, spendIdParameter] }),
+  post: activityOperation("Add spending request discussion message", "Members can add a plain-text message of 1–2000 characters. Other members are notified.", {
+    parameters: [communityIdParameter, spendIdParameter],
+    requestBody: jsonBody({ type: "object", required: ["body"], additionalProperties: false, properties: { body: { type: "string", minLength: 1, maxLength: 2000 } } }, { body: "Can we confirm the recipient invoice?" }),
+    responses: { ...walletResponse("Discussion message created"), 201: { description: "Discussion message created" } },
+  }),
+};
 
 // JSON parsing happens before controllers, so these errors apply to every request body.
 for (const [path, item] of Object.entries(module.exports.paths)) {

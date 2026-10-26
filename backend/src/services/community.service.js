@@ -1,6 +1,7 @@
 const crypto = require("node:crypto");
 const prisma = require("../lib/prisma");
 const { requireMembership } = require("./community-access.service");
+const { recordEvent } = require("./domain-events.service");
 
 const generateJoinCode = () => `DADA-${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
 const isUniqueConflict = (error) => error?.code === "P2002";
@@ -31,6 +32,10 @@ async function createCommunity(userId, name, description) {
         await tx.communityMembership.create({
           data: { userId, communityId: community.id, role: "COMMUNITY_ADMIN" },
         });
+        await recordEvent(tx, {
+          communityId: community.id, actorUserId: userId, eventType: "COMMUNITY_CREATED",
+          entityType: "community", entityId: community.id, metadata: { name: community.name },
+        });
         return { id: community.id, name: community.name, description: community.description, joinCode: community.joinCode, createdAt: community.createdAt, role: "COMMUNITY_ADMIN" };
       });
     } catch (error) {
@@ -57,8 +62,14 @@ async function joinCommunity(userId, joinCode) {
   });
   if (existing) return { conflict: true };
   try {
-    await prisma.communityMembership.create({
-      data: { userId, communityId: community.id, role: "COMMUNITY_MEMBER" },
+    await prisma.$transaction(async (tx) => {
+      await tx.communityMembership.create({ data: { userId, communityId: community.id, role: "COMMUNITY_MEMBER" } });
+      await recordEvent(tx, {
+        communityId: community.id, actorUserId: userId, eventType: "MEMBER_JOINED",
+        entityType: "member", entityId: userId, notification: {
+          audience: "admins", category: "membership", message: "A member joined the community.",
+        },
+      });
     });
   } catch (error) {
     // Prisma's PostgreSQL adapter may omit meta.target on this compound unique constraint.
@@ -70,12 +81,33 @@ async function joinCommunity(userId, joinCode) {
   return { community: { id: community.id, name: community.name, role: "COMMUNITY_MEMBER" } };
 }
 
+function setupStageFor(community) {
+  const signers = (community.memberships || []).flatMap(({ authorizedSigner }) => authorizedSigner ? [authorizedSigner] : []);
+  return community.wallet?.status === "READY"
+    ? "active"
+    : community.wallet
+      ? "review"
+      : signers.length === 0
+        ? "members"
+        : community.requiredSignatures === null || community.requiredSignatures === undefined
+          ? "rule"
+          : signers.some(({ publicKey }) => !publicKey)
+            ? "signers"
+            : "review";
+}
+
 async function listCommunities(userId) {
   const memberships = await prisma.communityMembership.findMany({
     where: { userId }, orderBy: { createdAt: "desc" },
-    select: { role: true, community: { select: { id: true, name: true, description: true } } },
+    select: { role: true, community: { select: {
+      id: true, name: true, description: true, requiredSignatures: true,
+      wallet: { select: { status: true } },
+      memberships: { select: { authorizedSigner: { select: { publicKey: true } } } },
+    } } },
   });
-  return memberships.map(({ role, community }) => ({ id: community.id, name: community.name, description: community.description, role }));
+  return memberships.map(({ role, community }) => {
+    return { id: community.id, name: community.name, description: community.description, role, setupStage: setupStageFor(community) };
+  });
 }
 
 async function getCommunity(userId, communityId) {
@@ -107,4 +139,4 @@ async function listMembers(userId, communityId) {
   return { members: memberships.map(({ role, user }) => ({ id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role })) };
 }
 
-module.exports = { createCommunity, joinCommunity, listCommunities, getCommunity, getCommunityByName, listMembers };
+module.exports = { createCommunity, joinCommunity, listCommunities, getCommunity, getCommunityByName, listMembers, setupStageFor };

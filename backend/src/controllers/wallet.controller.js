@@ -46,6 +46,7 @@ module.exports = {
     const result = await service.createSpend(req.userId, communityId, req.body?.recipient, req.body?.amountSats, req.body?.feeRate);
     return { ...result, amountSats: result.amountSats.toString(), feeSats: result.feeSats.toString() };
   }, 201),
+  listSpends: action((req, { communityId }) => service.listSpends(req.userId, communityId)),
   getSpend: action((req, { communityId, spendId }) => service.getSpend(req.userId, communityId, spendId)),
   psbt: action((req, { communityId, spendId }) => service.getSpend(req.userId, communityId, spendId, true)),
   sign: action((req, { communityId, spendId }) => service.submitPsbt(req.userId, communityId, spendId, req.body?.psbt)),

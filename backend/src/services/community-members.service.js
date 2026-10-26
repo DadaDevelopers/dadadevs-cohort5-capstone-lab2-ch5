@@ -1,4 +1,5 @@
 const { CommunityAccessError: MemberManagementError, membershipKey, asAdmin } = require("./community-access.service");
+const { recordEvent } = require("./domain-events.service");
 
 async function addMember(adminId, communityId, email) {
   return asAdmin(adminId, communityId, async (tx) => {
@@ -12,6 +13,10 @@ async function addMember(adminId, communityId, email) {
       const membership = await tx.communityMembership.create({
         data: { userId: user.id, communityId, role: "COMMUNITY_MEMBER" },
         select: { userId: true, communityId: true, role: true },
+      });
+      await recordEvent(tx, {
+        communityId, actorUserId: adminId, eventType: "MEMBER_ADDED", entityType: "member", entityId: user.id,
+        notification: { userIds: [user.id], excludeActor: false, category: "membership", message: "You were added to a community." },
       });
       return { member: membership };
     } catch (error) {
@@ -54,6 +59,10 @@ async function changeRole(adminId, communityId, targetUserId, role) {
     }
     if (target.role !== role) {
       await tx.communityMembership.update({ where: { id: target.id }, data: { role } });
+      await recordEvent(tx, {
+        communityId, actorUserId: adminId, eventType: "MEMBER_ROLE_CHANGED", entityType: "member", entityId: targetUserId,
+        metadata: { role }, notification: { userIds: [targetUserId], excludeActor: false, category: "membership", message: "Your community role changed." },
+      });
     }
     return { member: { userId: targetUserId, communityId, role } };
   });
@@ -67,6 +76,10 @@ async function removeMember(adminId, communityId, targetUserId) {
     }
     if (target.role === "COMMUNITY_ADMIN") await requireAnotherAdmin(tx, communityId);
     await tx.communityMembership.delete({ where: { id: target.id } });
+    await recordEvent(tx, {
+      communityId, actorUserId: adminId, eventType: "MEMBER_REMOVED", entityType: "member", entityId: targetUserId,
+      notification: { audience: "admins", category: "membership", message: "A member was removed from the community." },
+    });
   });
 }
 
