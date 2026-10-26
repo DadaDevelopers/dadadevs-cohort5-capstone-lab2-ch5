@@ -1,6 +1,10 @@
 import { confirmationText, requestStatusMeta } from '../lib/status'
-import type { SpendingRequestStatus } from '../types'
+import type { Network, SpendingRequestStatus } from '../types'
 import { Badge } from './ui'
+
+export function NetworkBadge({ network }: { network: Network }) {
+  return <Badge tone="teal" icon="info">Test mode · {network === 'regtest' ? 'Regtest' : 'Signet'} coins</Badge>
+}
 
 export function RequestStatusBadge({ status }: { status: SpendingRequestStatus }) {
   const meta = requestStatusMeta[status]
@@ -15,9 +19,16 @@ export function ConfirmationBadge({ confirmations }: { confirmations: number }) 
       </Badge>
     )
   }
+  if (confirmations >= 6) {
+    return (
+      <Badge tone="ok" icon="check">
+        Confirmed
+      </Badge>
+    )
+  }
   return (
     <Badge tone="ok" icon="check">
-      {confirmations >= 6 ? 'Confirmed' : `${confirmations} of 6 confirmations`}
+      {confirmations} confirmation{confirmations === 1 ? '' : 's'}
     </Badge>
   )
 }

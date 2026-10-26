@@ -2,12 +2,13 @@ import type { Tone } from '../components/ui'
 import type { Membership, SpendingRequestStatus, DemoRole } from '../types'
 
 export const requestStatusMeta: Record<SpendingRequestStatus, { label: string; tone: Tone; plain: string }> = {
-  pending: { label: 'Pending', tone: 'wait', plain: 'Prepared and waiting for the first signature. The creator can still edit it.' },
+  pending: { label: 'Pending', tone: 'wait', plain: 'Prepared and waiting for the first signature. Cancel and recreate it if details need to change.' },
   awaiting_signatures: { label: 'Awaiting signatures', tone: 'wait', plain: 'Signing has started. Details are locked.' },
-  ready_to_broadcast: { label: 'Ready to send', tone: 'teal', plain: 'Enough signers approved. Any signer can now send it to the Bitcoin network.' },
+  ready_to_broadcast: { label: 'Ready to send', tone: 'teal', plain: 'Enough signers approved. A community administrator can now send it to the Bitcoin network.' },
   broadcast: { label: 'Sent', tone: 'ok', plain: 'Accepted by the Bitcoin network.' },
   failed: { label: 'Send failed', tone: 'bad', plain: 'The Bitcoin node did not accept it. Signatures are kept and it can be retried.' },
   rejected: { label: 'Declined', tone: 'neutral', plain: 'Too many signers declined to reach the approval rule. Nothing was sent.' },
+  cancelled: { label: 'Cancelled', tone: 'neutral', plain: 'An administrator cancelled this request. Nothing was sent and its reserved inputs were released.' },
 }
 
 export function viewerRole(m: Membership): DemoRole {
