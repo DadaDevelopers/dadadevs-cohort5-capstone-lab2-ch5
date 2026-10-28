@@ -97,6 +97,17 @@ describe('real authentication API', () => {
     expect(fetchMock).toHaveBeenCalledOnce()
   })
 
+  it('explains a 503 as the Bitcoin node being unavailable in this environment', async () => {
+    storeSession('access', 'refresh')
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json({ error: 'Bitcoin service unavailable' }, 503))
+
+    await expect(api.createWallet('3')).rejects.toMatchObject({
+      code: 'NODE_UNAVAILABLE',
+      status: 503,
+      message: 'The Bitcoin node isn\'t available in this environment, so wallet features can\'t run here. The rest of CommunitySafe still works.',
+    })
+  })
+
   it('refreshes once after a 401 and retries with the new access token', async () => {
     storeSession('expired', 'refresh')
     const fetchMock = vi.spyOn(globalThis, 'fetch')
