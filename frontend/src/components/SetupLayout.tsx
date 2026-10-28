@@ -1,11 +1,12 @@
-import { Link, Navigate, Outlet, useLocation } from 'react-router-dom'
+import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useCommunity } from '../context/CommunityContext'
 import { useSession } from '../context/SessionContext'
 import type { SetupStage } from '../types'
 import { Icon, Logo } from './Icon'
 import { PrototypeBanner } from './PrototypeBanner'
-import { RoleSwitcher } from './RoleSwitcher'
-import { cx, Skeleton } from './ui'
+import { Button, cx, ErrorState, Skeleton } from './ui'
+import { CommunitySwitcher } from './CommunitySwitcher'
+import { NotificationBell } from './NotificationBell'
 
 export const SETUP_STEPS: { stage: SetupStage | 'create'; path: string; label: string; hint: string }[] = [
   { stage: 'create', path: '/start', label: 'Create community', hint: 'Name and type' },
@@ -19,10 +20,16 @@ const stageIndex: Record<SetupStage, number> = { members: 1, rule: 2, signers: 3
 
 /** The five-step onboarding shell from the Figma "Create community" frames. */
 export function SetupLayout() {
-  const { user } = useSession()
-  const { community, ready } = useCommunity()
+  const { user, logout } = useSession()
+  const { community, ready, error, refresh, clear } = useCommunity()
   const location = useLocation()
+  const navigate = useNavigate()
   const onStart = location.pathname === '/start'
+  const onLogout = async () => {
+    clear()
+    await logout()
+    navigate('/login', { replace: true })
+  }
 
   if (!user) return <Navigate to="/login" replace />
   if (!ready) {
@@ -40,27 +47,34 @@ export function SetupLayout() {
 
   const draft = !onStart && community && community.setupStage !== 'active' ? community : null
   if (!onStart) {
-    if (!community) return <Navigate to="/start" replace />
-    if (community.setupStage === 'active') {
+    if (!community && !error) return <Navigate to="/start" replace />
+    if (community?.setupStage === 'active') {
       // Finishing step 5 lands on the wallet so the new receiving address is the first thing shown.
       const justCreated = location.pathname === '/setup/review'
       return <Navigate to={justCreated ? '/app/wallet' : '/app'} replace state={{ created: justCreated }} />
     }
-    const requested = SETUP_STEPS.findIndex((s) => s.path === location.pathname)
-    if (requested > stageIndex[community.setupStage]) return <Navigate to={`/setup/${community.setupStage}`} replace />
+    if (community) {
+      const requested = SETUP_STEPS.findIndex((s) => s.path === location.pathname)
+      if (requested > stageIndex[community.setupStage]) return <Navigate to={`/setup/${community.setupStage}`} replace />
+    }
   }
   const reached = draft ? stageIndex[draft.setupStage] : 0
   const currentIndex = SETUP_STEPS.findIndex((s) => s.path === location.pathname)
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <PrototypeBanner showDemoControls={!!draft} />
+      <PrototypeBanner />
       <div className="flex flex-1 flex-col md:flex-row">
         <aside className="shrink-0 bg-night text-white md:w-72">
-          <div className="flex h-16 items-center gap-2.5 px-6">
-            <Logo size={26} />
-            <span className="text-lg font-bold">CommunitySafe</span>
+          <div className="flex min-h-16 items-center gap-2.5 px-4 py-3 md:px-6">
+            <Link to="/" aria-label="CommunitySafe home" className="flex items-center gap-2.5 rounded-lg focus-visible:outline-white">
+              <Logo size={26} />
+              <span className="text-lg font-bold">CommunitySafe</span>
+            </Link>
+            <span className="ml-auto rounded-lg bg-white"><NotificationBell /></span>
+            <Button variant="inverse" size="sm" icon="logout" onClick={onLogout}>Log out</Button>
           </div>
+          <CommunitySwitcher tone="dark" showError={!!community} className="px-4 pb-4 md:px-6" />
           {draft && <p className="px-6 pb-2 text-sm text-white/70">Setting up <span className="font-semibold text-white">{draft.name}</span></p>}
           <ol className="flex gap-1 overflow-x-auto px-3 pb-4 md:mt-6 md:flex-col md:gap-6 md:overflow-visible md:pb-10">
             {SETUP_STEPS.map((step, i) => {
@@ -97,21 +111,14 @@ export function SetupLayout() {
               )
             })}
           </ol>
-          {draft && (
-            <div className="hidden border-t border-white/15 px-6 py-5 md:block">
-              <RoleSwitcher dark />
-              <p className="mt-2 text-xs leading-relaxed text-white/55">Switch to a signer to register their key yourself, or simulate it from the admin view.</p>
-            </div>
-          )}
         </aside>
         <main className="flex-1 bg-surface px-4 py-8 sm:px-8 lg:px-16 lg:py-12">
           <div className="mx-auto max-w-3xl">
-            {draft && (
-              <div className="mb-6 md:hidden">
-                <RoleSwitcher />
-              </div>
+            {error && !community ? (
+              <ErrorState title="This community is unavailable" message={error} onRetry={() => void refresh()} />
+            ) : (
+              <Outlet />
             )}
-            <Outlet />
           </div>
         </main>
       </div>

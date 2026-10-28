@@ -26,8 +26,10 @@ export interface Community {
   name: string
   description: string
   type: CommunityType
-  createdBy: string // user id of the founding administrator
-  createdAt: ISODate
+  createdBy: string | null // not exposed by the current backend contract
+  createdAt: ISODate | null
+  /** Only administrators receive the join code from the backend. */
+  joinCode?: string
   setupStage: SetupStage
 }
 
@@ -39,7 +41,7 @@ export interface CommunityMember {
   name: string
   email: string
   isAdmin: boolean
-  joinedAt: ISODate
+  joinedAt: ISODate | null
 }
 
 export type SignerStatus = 'awaiting_key' | 'ready'
@@ -54,6 +56,8 @@ export interface AuthorisedSigner {
   memberId: string
   name: string
   status: SignerStatus
+  /** Exact compressed secp256k1 public key; only exposed for the current signer. */
+  publicKey?: string | null
   /** Extended public key (tpub/vpub on test networks). Null until registered. */
   xpub: string | null
   /** BIP32 master key fingerprint, 8 hex characters. */
@@ -89,7 +93,8 @@ export interface Contribution {
   id: string
   communityId: string
   txid: string
-  vout: number
+  /** Not exposed by the current wallet transaction endpoint. */
+  vout: number | null
   amountSats: number
   /** Optional note the treasurer attached, for example "September harambee". */
   label: string | null
@@ -105,6 +110,7 @@ export type SpendingRequestStatus =
   | 'broadcast' // accepted by the node
   | 'failed' // node rejected the broadcast; signatures are kept for retry
   | 'rejected' // enough signers declined that the threshold can no longer be reached
+  | 'cancelled' // an administrator cancelled it and released reserved inputs
 
 export interface BroadcastError {
   code: string
@@ -196,6 +202,39 @@ export interface AuditEvent {
   createdAt: ISODate
 }
 
+/** Durable event projection returned by the integrated audit API. */
+export interface CommunityAuditEvent {
+  id: string
+  eventType: string
+  entityType: string
+  entityId: string
+  metadata: Record<string, unknown> | null
+  actor: { id: string; name: string } | null
+  createdAt: ISODate
+}
+
+export interface Notification {
+  id: string
+  category: string
+  message: string
+  entityType: string
+  entityId: string
+  createdAt: ISODate
+  readAt: ISODate | null
+}
+
+export interface DiscussionMessage {
+  id: string
+  body: string
+  createdAt: ISODate
+  author: { id: string; name: string }
+}
+
+export interface CursorPage<T> {
+  items: T[]
+  nextCursor: string | null
+}
+
 // ---------------------------------------------------------------------------
 // View models returned by the API that combine entities.
 
@@ -223,15 +262,26 @@ export interface SpendingRequestSummary extends SpendingRequest {
 export interface HistoryEntry {
   direction: 'incoming' | 'outgoing'
   txid: string
+  /** External value moved: received for incoming, sent to recipients for outgoing. */
   amountSats: number
+  /** Network fee paid by this wallet, or null when the node did not report one. */
   feeSats: number | null
+  /** Wallet-owned change returned by an outgoing transaction. */
+  changeSats: number
+  /** amountSats + feeSats for outgoing payments; null for incoming or an unknown fee. */
+  totalDebitSats: number | null
   at: ISODate
   confirmations: number
   status: TxStatus
   label: string
   requestId: string | null
+  blockHash: string | null
+  /** Actual block height, or null when the transaction is unconfirmed or the node did not provide one. */
   blockHeight: number | null
   counterpartyAddress: string | null
+  /** Number of external outputs. More than one when a payment had multiple recipients. */
+  recipientCount: number
+  recipients: { address: string; amountSats: number }[]
 }
 
 export interface DashboardSummary {
