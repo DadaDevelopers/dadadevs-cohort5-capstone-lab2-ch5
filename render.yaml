@@ -39,7 +39,7 @@ services:
         sync: false
 
   - type: web
-    name: communitysafe-frontend
+    name: communitysafe
     runtime: static
     rootDir: frontend
     buildCommand: npm ci && npm run build
