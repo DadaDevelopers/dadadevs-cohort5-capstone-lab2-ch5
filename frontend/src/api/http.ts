@@ -96,6 +96,10 @@ async function errorFrom(response: Response): Promise<ApiError> {
       ? `Too many requests. Try again in ${parsedRetryAfter} second${parsedRetryAfter === 1 ? '' : 's'}.`
       : 'Too many requests. Please wait before trying again.'
   }
+  // The backend only returns 503 when Bitcoin Core cannot be reached.
+  if (response.status === 503) {
+    message = 'The Bitcoin node isn\'t available in this environment, so wallet features can\'t run here. The rest of CommunitySafe still works.'
+  }
   return new ApiError(errorCode(response.status), message, fields, response.status, parsedRetryAfter)
 }
 
