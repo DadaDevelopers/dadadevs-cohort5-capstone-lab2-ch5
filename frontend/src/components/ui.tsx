@@ -13,7 +13,7 @@ type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'inverse'
 type Size = 'sm' | 'md' | 'lg'
 
 const variantClass: Record<Variant, string> = {
-  primary: 'bg-accent text-white hover:bg-accent-hover disabled:bg-line disabled:text-faint',
+  primary: 'bg-forest text-white hover:bg-forest-2 disabled:bg-line disabled:text-faint',
   secondary: 'bg-surface text-ink border border-ink hover:bg-sunken disabled:border-line disabled:text-faint',
   ghost: 'text-ink hover:bg-sunken disabled:text-faint',
   danger: 'bg-surface text-bad-ink border border-bad-line hover:bg-bad disabled:text-faint',
@@ -36,7 +36,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 export function Button({ variant = 'primary', size = 'md', icon, iconRight, busy, className, children, disabled, ...rest }: ButtonProps) {
   return (
     <button
-      className={cx('inline-flex items-center justify-center font-semibold transition-colors select-none', variantClass[variant], sizeClass[size], className)}
+      className={cx('inline-flex items-center justify-center rounded-lg font-semibold transition-colors select-none', variantClass[variant], sizeClass[size], className)}
       disabled={disabled || busy}
       aria-busy={busy || undefined}
       {...rest}
@@ -57,7 +57,7 @@ interface ButtonLinkProps extends LinkProps {
 
 export function ButtonLink({ variant = 'primary', size = 'md', icon, iconRight, className, children, ...rest }: ButtonLinkProps) {
   return (
-    <Link className={cx('inline-flex items-center justify-center font-semibold transition-colors', variantClass[variant], sizeClass[size], className)} {...rest}>
+    <Link className={cx('inline-flex items-center justify-center rounded-lg font-semibold transition-colors', variantClass[variant], sizeClass[size], className)} {...rest}>
       {icon && <Icon name={icon} size={size === 'sm' ? 16 : 18} />}
       {children}
       {iconRight && <Icon name={iconRight} size={size === 'sm' ? 16 : 18} />}
@@ -107,7 +107,7 @@ function FieldShell({ label, hint, error, id, children, optional }: FieldShellPr
 }
 
 const inputBase =
-  'w-full bg-surface border px-3.5 text-[15px] text-ink placeholder:text-faint outline-none transition-colors focus:border-ink focus:ring-1 focus:ring-ink disabled:bg-sunken disabled:text-muted'
+  'w-full rounded-lg bg-surface border px-3.5 text-[15px] text-ink placeholder:text-faint outline-none transition-colors focus:border-forest focus:ring-2 focus:ring-teal-line disabled:bg-sunken disabled:text-muted'
 
 interface TextFieldProps extends InputHTMLAttributes<HTMLInputElement> {
   label: string
@@ -177,7 +177,7 @@ const toneClass: Record<Tone, string> = {
 
 export function Badge({ tone = 'neutral', children, icon, className }: { tone?: Tone; children: ReactNode; icon?: IconName; className?: string }) {
   return (
-    <span className={cx('inline-flex h-7 items-center gap-1 whitespace-nowrap border px-2.5 text-[13px] font-semibold', toneClass[tone], className)}>
+    <span className={cx('inline-flex h-7 items-center gap-1 whitespace-nowrap rounded-full border px-2.5 text-[13px] font-semibold', toneClass[tone], className)}>
       {icon && <Icon name={icon} size={14} />}
       {children}
     </span>
@@ -210,7 +210,7 @@ export function Notice({
 }) {
   const t = noticeTone[tone]
   return (
-    <div className={cx('flex flex-col gap-3 border-l-4 border px-4 py-3.5 sm:flex-row sm:items-start', t.box, className)} role={tone === 'bad' ? 'alert' : undefined}>
+    <div className={cx('flex flex-col gap-3 rounded-lg border-l-4 border px-4 py-3.5 sm:flex-row sm:items-start', t.box, className)} role={tone === 'bad' ? 'alert' : undefined}>
       <Icon name={t.icon} size={20} className="mt-0.5 shrink-0" />
       <div className="min-w-0 flex-1 text-[15px] leading-relaxed">
         {title && <p className="font-semibold">{title}</p>}
@@ -258,7 +258,7 @@ export function PageHeader({
 
 export function Panel({ title, action, children, className, bodyClassName }: { title?: ReactNode; action?: ReactNode; children: ReactNode; className?: string; bodyClassName?: string }) {
   return (
-    <section className={cx('border border-line bg-surface', className)}>
+    <section className={cx('overflow-hidden rounded-xl border border-line bg-surface', className)}>
       {title && (
         <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-4">
           <h2 className="text-[17px] font-bold">{title}</h2>
@@ -290,7 +290,7 @@ export function LoadingBlock({ rows = 3, label = 'Loading' }: { rows?: number; l
 
 export function EmptyState({ icon = 'request', title, children, action }: { icon?: IconName; title: string; children?: ReactNode; action?: ReactNode }) {
   return (
-    <div className="flex flex-col items-start gap-3 border border-dashed border-line-strong bg-surface px-6 py-10 sm:px-10">
+    <div className="flex flex-col items-start gap-3 rounded-xl border border-dashed border-line-strong bg-surface px-6 py-10 sm:px-10">
       <span className="flex h-11 w-11 items-center justify-center bg-sunken text-ink-soft">
         <Icon name={icon} size={22} />
       </span>
@@ -303,7 +303,7 @@ export function EmptyState({ icon = 'request', title, children, action }: { icon
 
 export function ErrorState({ message, onRetry, title = 'This could not be loaded' }: { message: string; onRetry?: () => void; title?: string }) {
   return (
-    <div role="alert" className="flex flex-col items-start gap-3 border border-bad-line bg-bad/50 px-6 py-8 sm:px-10">
+    <div role="alert" className="flex flex-col items-start gap-3 rounded-xl border border-bad-line bg-bad/50 px-6 py-8 sm:px-10">
       <span className="flex h-11 w-11 items-center justify-center bg-bad text-bad-ink">
         <Icon name="alert" size={22} />
       </span>
@@ -343,6 +343,16 @@ export function Amount({ sats: value, sign, className, showSats = false }: { sat
   )
 }
 
+/** Prominent balance display that responds to its card width and preserves precision. */
+export function BitcoinAmount({ sats: value, sign, className, size = 'prominent' }: { sats: number; sign?: '+' | '-'; className?: string; size?: 'prominent' | 'compact' }) {
+  return (
+    <span className={cx('btc-balance font-extrabold', size === 'compact' && 'btc-balance--compact', className)} data-testid="responsive-btc-amount">
+      <span className="btc-balance__value">{sign}{btc(value)}</span>
+      <span className="btc-balance__unit">BTC</span>
+    </span>
+  )
+}
+
 export function CopyButton({ value, label = 'Copy', className }: { value: string; label?: string; className?: string }) {
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle')
   const timer = useRef<number>(undefined)
@@ -361,7 +371,7 @@ export function CopyButton({ value, label = 'Copy', className }: { value: string
     <button
       type="button"
       onClick={copy}
-      className={cx('inline-flex h-9 shrink-0 items-center gap-1.5 border border-line-strong bg-surface px-3 text-sm font-semibold hover:bg-sunken', className)}
+      className={cx('inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-semibold hover:bg-sunken', className)}
     >
       <Icon name={state === 'copied' ? 'check' : 'copy'} size={16} />
       <span aria-live="polite">{state === 'copied' ? 'Copied' : state === 'failed' ? 'Select and copy' : label}</span>
@@ -374,7 +384,7 @@ export function CopyField({ value, label }: { value: string; label?: string }) {
   return (
     <div>
       {label && <p className="mb-1.5 text-sm font-semibold text-muted">{label}</p>}
-      <div className="flex items-center gap-2 border border-line bg-paper py-1.5 pl-3 pr-1.5">
+      <div className="flex items-center gap-2 rounded-lg border border-line bg-paper py-1.5 pl-3 pr-1.5">
         <code className="min-w-0 flex-1 break-all font-mono text-[13px] leading-relaxed text-ink">{value}</code>
         <CopyButton value={value} />
       </div>
@@ -412,7 +422,7 @@ export function Modal({ open, onClose, title, children, labelledBy }: { open: bo
         onClose()
       }}
       aria-labelledby={labelledBy ?? headingId}
-      className="m-auto w-[min(100%-2rem,960px)] max-h-[calc(100dvh-2rem)] overflow-y-auto border border-ink bg-surface p-0 text-ink backdrop:bg-night/60"
+      className="m-auto max-h-[calc(100dvh-2rem)] w-[min(100%-2rem,960px)] overflow-y-auto rounded-xl border border-ink bg-surface p-0 text-ink shadow-2xl backdrop:bg-night/60"
     >
       {open && (
         <div className="relative p-5 sm:p-8">

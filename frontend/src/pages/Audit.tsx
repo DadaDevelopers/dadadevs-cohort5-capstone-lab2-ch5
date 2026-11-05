@@ -1,112 +1,53 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import * as api from '../api'
-import { Icon, type IconName } from '../components/Icon'
-import { cx, EmptyState, ErrorState, LoadingBlock, PageHeader } from '../components/ui'
+import { Button, EmptyState, ErrorState, LoadingBlock, PageHeader, Panel } from '../components/ui'
 import { useActiveCommunity } from '../context/CommunityContext'
 import { dateTime } from '../lib/format'
 import { useAsync } from '../lib/useAsync'
-import type { AuditAction, AuditEvent } from '../types'
 
-type Group = 'all' | 'setup' | 'requests' | 'signing' | 'money'
-
-const GROUPS: { value: Group; label: string; actions: AuditAction[] }[] = [
-  { value: 'all', label: 'Everything', actions: [] },
-  { value: 'setup', label: 'Community & setup', actions: ['community_created', 'community_updated', 'member_added', 'signers_selected', 'signer_key_registered', 'threshold_set', 'wallet_created'] },
-  { value: 'requests', label: 'Requests', actions: ['request_created', 'request_edited', 'request_rejected'] },
-  { value: 'signing', label: 'Signatures', actions: ['request_signed', 'request_declined', 'threshold_reached'] },
-  { value: 'money', label: 'Money in & out', actions: ['contribution_received', 'broadcast_succeeded', 'broadcast_failed'] },
-]
-
-const META: Record<AuditAction, { label: string; icon: IconName; tone: string }> = {
-  community_created: { label: 'Community created', icon: 'house', tone: 'bg-sunken text-ink' },
-  community_updated: { label: 'Community updated', icon: 'pen', tone: 'bg-sunken text-ink' },
-  member_added: { label: 'Member added', icon: 'users', tone: 'bg-sunken text-ink' },
-  signers_selected: { label: 'Signers selected', icon: 'key', tone: 'bg-teal text-teal-ink' },
-  signer_key_registered: { label: 'Public key registered', icon: 'key', tone: 'bg-teal text-teal-ink' },
-  threshold_set: { label: 'Approval rule set', icon: 'rule', tone: 'bg-teal text-teal-ink' },
-  wallet_created: { label: 'Wallet created', icon: 'lock', tone: 'bg-forest text-white' },
-  contribution_received: { label: 'Contribution received', icon: 'arrowDownLeft', tone: 'bg-ok text-ok-ink' },
-  request_created: { label: 'Request created', icon: 'request', tone: 'bg-wait text-wait-ink' },
-  request_edited: { label: 'Request edited', icon: 'pen', tone: 'bg-wait text-wait-ink' },
-  request_signed: { label: 'Signed', icon: 'pen', tone: 'bg-forest text-white' },
-  request_declined: { label: 'Declined', icon: 'x', tone: 'bg-bad text-bad-ink' },
-  threshold_reached: { label: 'Approval rule met', icon: 'unlock', tone: 'bg-accent text-white' },
-  request_rejected: { label: 'Request closed', icon: 'ban', tone: 'bg-sunken text-ink' },
-  broadcast_succeeded: { label: 'Sent to network', icon: 'send', tone: 'bg-ok text-ok-ink' },
-  broadcast_failed: { label: 'Send failed', icon: 'alert', tone: 'bg-bad text-bad-ink' },
+const eventNames: Record<string, string> = {
+  COMMUNITY_CREATED: 'Community created', MEMBER_JOINED: 'Member joined', MEMBER_ADDED: 'Member added',
+  MEMBER_ROLE_CHANGED: 'Member role changed', MEMBER_REMOVED: 'Member removed', SIGNER_SELECTED: 'Signer selected',
+  SIGNER_REMOVED: 'Signer removed', SIGNER_KEY_REGISTERED: 'Signer key registered', SIGNING_THRESHOLD_CHANGED: 'Approval rule changed',
+  WALLET_CREATED: 'Wallet created', SPENDING_REQUEST_CREATED: 'Payment proposed', SPENDING_REQUEST_SIGNED: 'Payment signed',
+  SPENDING_THRESHOLD_REACHED: 'Signature threshold reached', SPENDING_REQUEST_BROADCAST: 'Payment broadcast',
+  SPENDING_REQUEST_CANCELLED: 'Payment cancelled', PAYMENT_CONFIRMED: 'Payment confirmed', CONTRIBUTION_CONFIRMED: 'Contribution confirmed',
+  DISCUSSION_MESSAGE_ADDED: 'Discussion message added',
 }
 
-function targetLink(e: AuditEvent): string | null {
-  if (e.targetType === 'request') return `/app/requests/${e.targetId}`
-  if (e.targetType === 'transaction') return `/app/transactions/${e.targetId}`
-  return null
-}
+const label = (value: string) => eventNames[value] ?? value.toLowerCase().replaceAll('_', ' ').replace(/^./, (letter) => letter.toUpperCase())
+const eventLink = (entityType: string, entityId: string) => entityType === 'spending_request' ? `/app/requests/${entityId}` : entityType === 'transaction' ? `/app/transactions/${entityId}` : null
 
 export default function Audit() {
   const { community } = useActiveCommunity()
-  const events = useAsync(() => api.listAuditEvents(community.id), [community.id])
-  const [group, setGroup] = useState<Group>('all')
-  const actions = GROUPS.find((g) => g.value === group)?.actions ?? []
-  const shown = (events.data ?? []).filter((e) => group === 'all' || actions.includes(e.action))
+  const [type, setType] = useState('')
+  const [cursor, setCursor] = useState<string | undefined>()
+  const [history, setHistory] = useState<(string | undefined)[]>([])
+  const page = useAsync(() => api.listAuditEvents(community.id, { type, cursor, limit: 20 }), [community.id, type, cursor])
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        title="Audit log"
-        description="A permanent record of who did what and when: who created each request, who signed or declined, and who sent each payment. Every member can read it."
-      />
-      <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-        <div role="tablist" aria-label="Filter events" className="flex min-w-max gap-2">
-          {GROUPS.map((g) => (
-            <button
-              key={g.value}
-              role="tab"
-              aria-selected={group === g.value}
-              onClick={() => setGroup(g.value)}
-              className={cx('h-10 border px-4 text-sm font-semibold', group === g.value ? 'border-forest bg-forest text-white' : 'border-line-strong bg-surface hover:bg-sunken')}
-            >
-              {g.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {events.loading && !events.data ? (
-        <LoadingBlock rows={6} label="Loading audit log" />
-      ) : events.error ? (
-        <ErrorState message={events.error} onRetry={events.reload} />
-      ) : shown.length === 0 ? (
-        <EmptyState icon="audit" title="No events here yet">Events are added automatically as people use the community wallet.</EmptyState>
-      ) : (
-        <ol className="relative border border-line bg-surface">
-          {shown.map((e) => {
-            const meta = META[e.action]
-            const link = targetLink(e)
-            return (
-              <li key={e.id} className="grid grid-cols-[2.5rem_1fr] gap-x-4 border-b border-line px-4 py-4 last:border-b-0 sm:grid-cols-[11rem_2.5rem_1fr] sm:px-5">
-                <time dateTime={e.createdAt} className="col-span-2 mb-2 text-sm tabular text-muted sm:col-span-1 sm:mb-0 sm:pt-2">
-                  {dateTime(e.createdAt)}
-                </time>
-                <span className={cx('flex h-10 w-10 items-center justify-center', meta.tone)}>
-                  <Icon name={meta.icon} size={18} />
-                </span>
-                <div className="min-w-0">
-                  <p className="text-sm font-bold uppercase tracking-wider text-muted">{meta.label}</p>
-                  <p className="mt-0.5 text-[15px] leading-relaxed">
-                    <span className="font-semibold">{e.actorName}</span> · {e.summary}
-                  </p>
-                  {link && (
-                    <Link to={link} className="mt-1 inline-flex items-center gap-1 text-sm font-semibold underline underline-offset-2">
-                      Open <Icon name="arrowRight" size={14} />
-                    </Link>
-                  )}
-                </div>
-              </li>
-            )
-          })}
-        </ol>
+      <PageHeader title="Audit log" description={`A permanent, server-generated record of important activity in ${community.name}.`} />
+      <label className="flex max-w-xs flex-col gap-1.5 text-sm font-semibold" htmlFor="audit-type">
+        Event type
+        <select id="audit-type" value={type} onChange={(event) => { setType(event.target.value); setCursor(undefined); setHistory([]) }} className="h-11 rounded-lg border border-line-strong bg-surface px-3 text-[15px] focus:border-forest focus:outline-none focus:ring-2 focus:ring-teal-line">
+          <option value="">All activity</option>
+          {Object.entries(eventNames).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
+        </select>
+      </label>
+      {page.loading ? <LoadingBlock rows={4} label="Loading audit events" /> : page.error ? <ErrorState message={page.error} onRetry={page.reload} /> : !page.data?.items.length ? <EmptyState icon="audit" title="No activity yet">Important actions will appear here as they happen.</EmptyState> : (
+        <Panel><ol className="divide-y divide-line">{page.data.items.map((event) => (
+          <li key={event.id} className="flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+            <div className="min-w-0"><p className="font-semibold text-ink">{label(event.eventType)}</p><p className="mt-0.5 text-sm text-muted">{community.name} · {event.actor?.name ?? 'CommunitySafe'} · {label(event.entityType)} #{event.entityId}</p>{eventLink(event.entityType, event.entityId) && <Link className="mt-1 inline-block text-sm font-semibold text-forest underline underline-offset-2" to={eventLink(event.entityType, event.entityId)!}>Open related record</Link>}</div>
+            <time className="shrink-0 text-sm text-muted" dateTime={event.createdAt}>{dateTime(event.createdAt)}</time>
+          </li>
+        ))}</ol></Panel>
       )}
+      {page.data && (history.length > 0 || page.data.nextCursor) && <nav className="flex justify-end gap-2" aria-label="Audit log pages">
+        <Button variant="secondary" size="sm" disabled={history.length === 0} onClick={() => { const previous = [...history]; setCursor(previous.pop()); setHistory(previous) }}>Previous</Button>
+        <Button variant="secondary" size="sm" disabled={!page.data.nextCursor} onClick={() => { setHistory((values) => [...values, cursor]); setCursor(page.data?.nextCursor ?? undefined) }}>Next</Button>
+      </nav>}
     </div>
   )
 }

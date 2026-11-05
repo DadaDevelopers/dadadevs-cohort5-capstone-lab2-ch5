@@ -1,5 +1,6 @@
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppLayout } from './components/AppLayout'
+import { ProtectedRoute } from './components/ProtectedRoute'
 import { SetupLayout } from './components/SetupLayout'
 import { CommunityProvider } from './context/CommunityContext'
 import { SessionProvider } from './context/SessionContext'
@@ -30,29 +31,30 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
 
-            <Route element={<SetupLayout />}>
-              <Route path="/start" element={<CreateCommunity />} />
-              <Route path="/setup/members" element={<Members mode="setup" />} />
-              <Route path="/setup/rule" element={<ApprovalRule mode="setup" />} />
-              <Route path="/setup/signers" element={<Signers mode="setup" />} />
-              <Route path="/setup/review" element={<ReviewAndCreate />} />
-            </Route>
+            <Route element={<ProtectedRoute />}>
+              <Route element={<SetupLayout />}>
+                <Route path="/start" element={<CreateCommunity />} />
+                <Route path="/setup/members" element={<Members mode="setup" />} />
+                <Route path="/setup/rule" element={<ApprovalRule mode="setup" />} />
+                <Route path="/setup/signers" element={<Signers mode="setup" />} />
+                <Route path="/setup/review" element={<ReviewAndCreate />} />
+              </Route>
 
-            <Route path="/app" element={<AppLayout />}>
-              <Route index element={<Dashboard />} />
-              <Route path="wallet" element={<WalletPage />} />
-              <Route path="requests" element={<Requests />} />
-              <Route path="requests/new" element={<RequestForm />} />
-              <Route path="requests/:id" element={<RequestDetail />} />
-              <Route path="requests/:id/edit" element={<RequestForm />} />
-              <Route path="transactions" element={<Transactions />} />
-              <Route path="transactions/:txid" element={<TransactionDetail />} />
-              <Route path="members" element={<Members />} />
-              <Route path="signers" element={<Signers />} />
-              <Route path="approval-rule" element={<ApprovalRule />} />
-              <Route path="audit" element={<Audit />} />
-              <Route path="settings" element={<Settings />} />
-              <Route path="*" element={<NotFound embedded />} />
+              <Route path="/app" element={<AppLayout />}>
+                <Route index element={<Dashboard />} />
+                <Route path="wallet" element={<WalletPage />} />
+                <Route path="requests" element={<Requests />} />
+                <Route path="requests/new" element={<RequestForm />} />
+                <Route path="requests/:id" element={<RequestDetail />} />
+                <Route path="transactions" element={<Transactions />} />
+                <Route path="transactions/:txid" element={<TransactionDetail />} />
+                <Route path="members" element={<Members />} />
+                <Route path="signers" element={<Signers />} />
+                <Route path="approval-rule" element={<ApprovalRule />} />
+                <Route path="audit" element={<Audit />} />
+                <Route path="settings" element={<Settings />} />
+                <Route path="*" element={<NotFound embedded />} />
+              </Route>
             </Route>
 
             <Route path="/dashboard" element={<Navigate to="/app" replace />} />

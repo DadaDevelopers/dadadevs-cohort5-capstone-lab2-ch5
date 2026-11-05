@@ -7,6 +7,7 @@ import { Avatar, Badge, Button, cx, ErrorState, LoadingBlock, Notice, TextArea, 
 import { useCommunity } from '../context/CommunityContext'
 import { useAsync } from '../lib/useAsync'
 import type { CommunityType } from '../types'
+import { communityDestination } from '../components/CommunitySwitcher'
 
 const TYPES: { value: CommunityType; label: string; icon: IconName; hint: string }[] = [
   { value: 'community', label: 'Community', icon: 'house', hint: 'Residents, chamas, village projects' },
@@ -33,20 +34,25 @@ export function CreateCommunity() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [joinCode, setJoinCode] = useState('')
+  const [joinError, setJoinError] = useState<string | null>(null)
+  const [joining, setJoining] = useState(false)
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     const next: Record<string, string> = {}
     if (name.trim().length < 3) next.name = 'Give the community a name of at least 3 characters.'
-    if (description.length > 1000) next.description = 'Keep the description under 1000 characters.'
+    if (!description.trim()) next.description = 'Describe what the community is for.'
+    if (description.length > 500) next.description = 'Keep the description under 500 characters.'
     setErrors(next)
     if (Object.keys(next).length) return
     setBusy(true)
     setFormError(null)
     try {
       const c = await api.createCommunity({ name, description, type })
-      await selectCommunity(c.id)
-      navigate('/setup/members')
+      const selected = await selectCommunity(c.id)
+      if (!selected) throw new Error('The new community could not be opened. Please try again.')
+      navigate(communityDestination(selected))
     } catch (err) {
       if (err instanceof ApiError) setErrors(err.fields)
       setFormError(errorMessage(err))
@@ -54,7 +60,26 @@ export function CreateCommunity() {
     }
   }
 
+  const join = async () => {
+    if (!joinCode.trim()) {
+      setJoinError('Enter the join code shared by a community administrator.')
+      return
+    }
+    setJoining(true)
+    setJoinError(null)
+    try {
+      const community = await api.joinCommunity(joinCode)
+      const selected = await selectCommunity(community.id)
+      if (!selected) throw new Error('The joined community could not be opened. Please try again.')
+      navigate(communityDestination(selected))
+    } catch (err) {
+      setJoinError(errorMessage(err))
+      setJoining(false)
+    }
+  }
+
   return (
+    <div className="flex flex-col gap-10">
     <form onSubmit={submit} noValidate>
       <StepHeader step={1} title="Create your community" description="Start by giving your community a name and description. You will become its administrator." />
       {formError && <Notice tone="bad" title="The community was not created" className="mb-6">{formError}</Notice>}
@@ -63,14 +88,13 @@ export function CreateCommunity() {
         <div>
           <TextArea
             label="Description"
-            optional
             placeholder="Tell members what the community is about and what the money is for."
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             error={errors.description}
-            maxLength={1000}
+            maxLength={500}
           />
-          <p className="mt-1 text-right text-sm tabular text-muted">{description.length}/1000</p>
+          <p className="mt-1 text-right text-sm tabular text-muted">{description.length}/500</p>
         </div>
         <fieldset>
           <legend className="text-[15px] font-semibold">Community type</legend>
@@ -98,6 +122,18 @@ export function CreateCommunity() {
         </Button>
       </div>
     </form>
+    <section className="border-t border-line pt-8">
+      <h2 className="text-xl font-bold">Already have a join code?</h2>
+      <p className="mt-1 text-sm text-muted">Join an existing community using the code its administrator shared with you.</p>
+      {joinError && <Notice tone="bad" className="mt-4">{joinError}</Notice>}
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+        <div className="flex-1">
+          <TextField label="Join code" value={joinCode} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} placeholder="DADA-…" />
+        </div>
+        <Button type="button" variant="secondary" busy={joining} onClick={join}>Join community</Button>
+      </div>
+    </section>
+    </div>
   )
 }
 
@@ -160,7 +196,7 @@ export function ReviewAndCreate() {
                   <Avatar name={s.name} size={36} />
                   <span className="flex-1 font-semibold">{s.name}</span>
                   {s.status === 'ready' ? (
-                    <Badge tone="ok" icon="check">Key registered{s.fingerprint ? ` · ${s.fingerprint}` : ''}</Badge>
+                    <Badge tone="ok" icon="check">Compressed public key registered</Badge>
                   ) : (
                     <Badge tone="wait" icon="clock">Waiting for key</Badge>
                   )}

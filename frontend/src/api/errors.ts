@@ -5,19 +5,24 @@ export type ApiErrorCode =
   | 'VALIDATION'
   | 'CONFLICT'
   | 'NODE_UNAVAILABLE'
+  | 'RATE_LIMITED'
   | 'NETWORK'
 
 /** Error shape every API function rejects with. The backend should return the same fields as JSON. */
 export class ApiError extends Error {
   readonly code: ApiErrorCode
+  readonly status: number | null
   /** Field level messages for forms, keyed by input name. */
   readonly fields: Record<string, string>
+  readonly retryAfterSeconds: number | null
 
-  constructor(code: ApiErrorCode, message: string, fields: Record<string, string> = {}) {
+  constructor(code: ApiErrorCode, message: string, fields: Record<string, string> = {}, status: number | null = null, retryAfterSeconds: number | null = null) {
     super(message)
     this.name = 'ApiError'
     this.code = code
     this.fields = fields
+    this.status = status
+    this.retryAfterSeconds = retryAfterSeconds
   }
 }
 

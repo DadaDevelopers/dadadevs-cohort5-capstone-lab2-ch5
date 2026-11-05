@@ -55,7 +55,7 @@
     @apply tracking-tight;
   }
   :focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 2px solid var(--color-forest-2);
     outline-offset: 2px;
   }
   button:disabled {
@@ -65,6 +65,49 @@
 
 @utility tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/* Container-aware balance display. The unit can wrap without clipping or
+   reducing the meaningful precision of the numeric value. */
+.btc-balance {
+  container-type: inline-size;
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 0.35em;
+  row-gap: 0.2rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.btc-balance__value {
+  min-width: 0;
+  max-width: 100%;
+  font-size: clamp(1.45rem, 11cqi, 2.75rem);
+  line-height: 1;
+  letter-spacing: -0.035em;
+}
+
+.btc-balance__unit {
+  font-size: clamp(0.75rem, 4cqi, 0.95rem);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.btc-balance--compact .btc-balance__value {
+  font-size: clamp(0.85rem, 8cqi, 1rem);
+  letter-spacing: -0.02em;
+}
+
+.btc-balance--compact .btc-balance__unit {
+  font-size: 0.7rem;
+}
+
+@container (max-width: 13rem) {
+  .btc-balance__unit {
+    flex-basis: 100%;
+  }
 }
 
 /* Diagonal hatching used for declined signer slots */

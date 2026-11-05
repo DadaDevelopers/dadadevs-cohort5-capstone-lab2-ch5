@@ -1,78 +1,86 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const jwt = require("jsonwebtoken");
-
-process.env.JWT_SECRET = "community-test-access-secret";
-process.env.JWT_EXPIRES_IN = "1h";
-
-const memberships = new Map();
-// The mock can change membership during a request sequence to verify current permissions.
-const prisma = {
-  communityMembership: {
-    // Match the compound-key lookup used by the authorization middleware.
-    async findUnique({ where }) {
-      const { userId, communityId } = where.userId_communityId;
-      return memberships.get(`${userId}:${communityId}`) || null;
-    },
-  },
-  async $queryRaw() { return [1]; },
-};
-
+process.env.JWT_SECRET = "validation-test-secret";
+process.env.REFRESH_TOKEN_SECRET = "validation-refresh-secret";
 const prismaPath = require.resolve("../src/lib/prisma");
-require.cache[prismaPath] = { id: prismaPath, filename: prismaPath, loaded: true, exports: prisma };
+let queries = 0;
+require.cache[prismaPath] = { id: prismaPath, filename: prismaPath, loaded: true, exports: {
+  user: { async findUnique() { queries++; throw new Error("secret-password private-key SQL /internal/path"); } },
+} };
+const rateLimitPath = require.resolve("../src/middleware/auth-rate-limit");
+require.cache[rateLimitPath] = { id: rateLimitPath, filename: rateLimitPath, loaded: true, exports: {
+  authLimiter: (req, res, next) => next(), loginLimiter: (req, res, next) => next(),
+  loginLockout: (req, res, next) => next(), recordLoginFailure() {}, clearLoginFailures() {},
+} };
 const app = require("../src/app");
 
-test("community permissions are scoped and reflect current membership", async () => {
+test("invalid inputs and unexpected errors stay safe at the HTTP boundary", async () => {
   const server = app.listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
-  const token = jwt.sign({ userId: 1 }, process.env.JWT_SECRET, { expiresIn: "1h" });
-  // Return status and JSON so permission responses can be inspected together.
-  const get = async (path, authenticated = true) => {
+  const request = async (path, body, token) => {
     const response = await fetch(base + path, {
-      headers: authenticated ? { Authorization: `Bearer ${token}` } : {},
+      method: body === undefined ? "GET" : "POST",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: body === undefined ? undefined : JSON.stringify(body),
     });
     return { status: response.status, body: await response.json() };
   };
-
+  const logs = [];
+  const originalError = console.error;
+  console.error = (...args) => logs.push(args);
   try {
-    // The old auth path is removed; unauthenticated and nonmember requests differ.
-    assert.equal((await fetch(base + "/auth/community-test/1/member")).status, 404);
-    assert.deepEqual(await get("/communities/1/test/member", false), { status: 401, body: { error: "Unauthorized" } });
-    assert.deepEqual(await get("/communities/1/test/member"), { status: 403, body: { error: "Forbidden" } });
-    assert.equal((await get("/communities/999/test/member")).status, 403);
-    assert.equal((await get("/communities/not-an-id/test/member")).status, 403);
-
-    // A regular member can pass only the membership check.
-    const membership = { id: 10, role: "COMMUNITY_MEMBER", authorizedSigner: null };
-    memberships.set("1:1", membership);
-    assert.deepEqual(await get("/communities/1/test/member"), { status: 200, body: { message: "Community membership confirmed" } });
-    assert.equal((await get("/communities/1/test/admin")).status, 403);
-    assert.equal((await get("/communities/1/test/signer")).status, 403);
-
-    // Changing the current role grants admin access without granting signer access.
-    membership.role = "COMMUNITY_ADMIN";
-    assert.deepEqual(await get("/communities/1/test/admin"), { status: 200, body: { message: "Community admin access granted" } });
-    assert.equal((await get("/communities/1/test/signer")).status, 403);
-
-    // Signer access follows the linked signer record, not the admin role.
-    membership.authorizedSigner = { id: 20 };
-    assert.deepEqual(await get("/communities/1/test/signer"), { status: 200, body: { message: "Authorized signer access granted" } });
-
-    // Permissions for one community do not carry over to another.
-    memberships.set("1:2", { id: 11, role: "COMMUNITY_MEMBER", authorizedSigner: null });
-    assert.equal((await get("/communities/2/test/member")).status, 200);
-    assert.equal((await get("/communities/2/test/admin")).status, 403);
-    assert.equal((await get("/communities/2/test/signer")).status, 403);
-
-    // The OpenAPI paths use the new namespace and Community group.
-    const paths = require("../src/openapi").paths;
-    for (const permission of ["member", "admin", "signer"]) {
-      const path = `/communities/{communityId}/test/${permission}`;
-      assert.deepEqual(paths[path].get.tags, ["Community"]);
-      assert.equal(paths[`/auth/community-test/{communityId}/${permission}`], undefined);
+    const registration = { firstName: "Ada", lastName: "Test", email: "ada@example.com", password: "password123" };
+    for (const change of [{ firstName: "x".repeat(101) }, { lastName: "x".repeat(101) }, { email: "x".repeat(250) + "@example.com" }, { password: "x".repeat(73) }, { password: "é".repeat(37) }]) {
+      assert.equal((await request("/auth/register", { ...registration, ...change })).status, 400);
     }
-    assert.equal(paths["/auth/admin-test"], undefined);
+    for (const body of [{ token: "ok", newPassword: "é".repeat(37) }, { token: "x".repeat(257), newPassword: "password123" }, { token: [], newPassword: "password123" }]) {
+      assert.equal((await request("/auth/reset-password", body)).status, 400);
+    }
+    assert.equal((await request("/auth/login", { email: "ada@example.com", password: "x".repeat(73) })).status, 401);
+    for (const userId of [0, -1, "1", 1.5, 2147483648]) {
+      assert.equal((await request("/auth/me", undefined, jwt.sign({ userId }, process.env.JWT_SECRET))).status, 401);
+      assert.equal((await request("/auth/refresh", { refreshToken: jwt.sign({ userId, type: "refresh" }, process.env.REFRESH_TOKEN_SECRET) })).status, 401);
+    }
+    assert.equal((await request("/auth/me", undefined, jwt.sign({ userId: 1 }, process.env.JWT_SECRET, { algorithm: "HS384" }))).status, 401);
+    assert.equal(queries, 0);
+    assert.deepEqual(await request("/auth/me", undefined, jwt.sign({ userId: 1 }, process.env.JWT_SECRET)), {
+      status: 500, body: { error: "Internal server error" },
+    });
+    assert.deepEqual(logs, [["Authentication request failed", "UNEXPECTED_ERROR"]]);
+    const malformed = await fetch(base + "/auth/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: '{"password":"secret",' });
+    assert.equal(malformed.status, 400);
+    assert.deepEqual(await malformed.json(), { error: "Invalid JSON" });
+    const oversized = await fetch(base + "/auth/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: "x".repeat(110000) }) });
+    assert.equal(oversized.status, 413);
+    assert.equal((await fetch(base + "/communities/%E0%A4%A")).status, 400);
+    assert.equal(logs.length, 1);
+    for (const permission of ["member", "admin", "signer"]) {
+      assert.equal((await fetch(base + `/communities/1/test/${permission}`)).status, 404);
+      assert.equal(require("../src/openapi").paths[`/communities/{communityId}/test/${permission}`], undefined);
+    }
+    const spec = require("../src/openapi");
+    for (const [prefix, router] of [["/auth", require("../src/routes/auth.routes")], ["/communities", require("../src/routes/community.routes")]]) {
+      const documented = new Set();
+      for (const layer of router.stack.filter((layer) => layer.route)) {
+        const path = prefix + (layer.route.path === "/" ? "" : layer.route.path.replace(/:([A-Za-z]+)/g, "{$1}"));
+        for (const method of Object.keys(layer.route.methods)) {
+          const operation = spec.paths[path]?.[method];
+          assert.ok(operation, `${method} ${path} needs documentation`);
+          if (prefix === "/communities" || path === "/auth/me") assert.deepEqual(operation.security, [{ bearerAuth: [] }]);
+          documented.add(`${method} ${path}`);
+        }
+      }
+      for (const [path, item] of Object.entries(spec.paths).filter(([path]) => path.startsWith(prefix))) {
+        for (const method of Object.keys(item)) assert.ok(documented.has(`${method} ${path}`), `stale docs: ${method} ${path}`);
+      }
+    }
+    const { validatePublicInfo } = require("../src/lib/signer-public-info-validation");
+    for (const publicKey of [`9${"1".repeat(50)}`, `c${"1".repeat(51)}`, "xpriv-private", "-----BEGIN PRIVATE KEY-----"]) {
+      assert.equal(validatePublicInfo({ publicKey }).error, "Private key material must never be submitted to the server");
+    }
   } finally {
-    server.close();
+    console.error = originalError;
+    await new Promise((resolve) => server.close(resolve));
   }
 });

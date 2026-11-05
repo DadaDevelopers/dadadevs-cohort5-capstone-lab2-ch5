@@ -638,8 +638,9 @@ export function listHistory(communityId: string, userId: string): HistoryEntry[]
     .filter((c) => c.communityId === communityId)
     .map((c) => ({
       direction: 'incoming', txid: c.txid, amountSats: c.amountSats, feeSats: null, at: c.receivedAt,
-      confirmations: confs(c.blockHeight), status: c.blockHeight === null ? 'mempool' : 'confirmed',
-      label: c.label ?? 'Contribution', requestId: null, blockHeight: c.blockHeight, counterpartyAddress: null,
+      changeSats: 0, totalDebitSats: null, confirmations: confs(c.blockHeight), status: c.blockHeight === null ? 'mempool' : 'confirmed',
+      label: c.label ?? 'Contribution', requestId: null, blockHash: null, blockHeight: c.blockHeight,
+      counterpartyAddress: null, recipientCount: 0, recipients: [],
     }))
   const outgoing: HistoryEntry[] = db.transactions
     .filter((t) => t.communityId === communityId)
@@ -647,8 +648,11 @@ export function listHistory(communityId: string, userId: string): HistoryEntry[]
       const r = db.requests.find((x) => x.id === t.requestId)
       return {
         direction: 'outgoing', txid: t.txid, amountSats: t.amountSats, feeSats: t.feeSats, at: t.broadcastAt,
-        confirmations: confs(t.blockHeight), status: t.blockHeight === null ? 'mempool' : 'confirmed',
-        label: r ? r.title : 'Payment', requestId: t.requestId, blockHeight: t.blockHeight, counterpartyAddress: t.recipientAddress,
+        changeSats: 0, totalDebitSats: t.amountSats + t.feeSats, confirmations: confs(t.blockHeight),
+        status: t.blockHeight === null ? 'mempool' : 'confirmed', label: r ? r.title : 'Payment',
+        requestId: t.requestId, blockHash: null, blockHeight: t.blockHeight,
+        counterpartyAddress: t.recipientAddress, recipientCount: 1,
+        recipients: [{ address: t.recipientAddress, amountSats: t.amountSats }],
       }
     })
   return [...incoming, ...outgoing].sort((a, b) => b.at.localeCompare(a.at))

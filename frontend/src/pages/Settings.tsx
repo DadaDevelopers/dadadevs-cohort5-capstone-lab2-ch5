@@ -1,9 +1,6 @@
-import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import * as api from '../api'
-import { ApiError, errorMessage } from '../api/errors'
 import { Icon, type IconName } from '../components/Icon'
-import { Button, KeyValue, Notice, PageHeader, Panel, TextArea, TextField } from '../components/ui'
+import { Button, KeyValue, Notice, PageHeader, Panel } from '../components/ui'
 import { useActiveCommunity } from '../context/CommunityContext'
 import { useSession } from '../context/SessionContext'
 import { date } from '../lib/format'
@@ -18,57 +15,19 @@ const LINKS: { to: string; icon: IconName; title: string; body: string }[] = [
 export default function Settings() {
   const navigate = useNavigate()
   const { logout } = useSession()
-  const { community, wallet, membership, refresh } = useActiveCommunity()
-  const [name, setName] = useState(community.name)
-  const [description, setDescription] = useState(community.description)
-  const [errors, setErrors] = useState<Record<string, string>>({})
-  const [status, setStatus] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null)
-  const [busy, setBusy] = useState(false)
-
-  const save = async (e: FormEvent) => {
-    e.preventDefault()
-    if (name.trim().length < 3) {
-      setErrors({ name: 'Give the community a name of at least 3 characters.' })
-      return
-    }
-    setErrors({})
-    setBusy(true)
-    setStatus(null)
-    try {
-      await api.updateCommunity(community.id, { name, description })
-      await refresh()
-      setStatus({ tone: 'ok', text: 'Community details saved.' })
-    } catch (err) {
-      if (err instanceof ApiError) setErrors(err.fields)
-      setStatus({ tone: 'bad', text: errorMessage(err) })
-    } finally {
-      setBusy(false)
-    }
-  }
+  const { community, wallet, membership } = useActiveCommunity()
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title="Settings" />
 
       <Panel title="Community information">
-        {membership.isAdmin ? (
-          <form onSubmit={save} noValidate className="flex flex-col gap-5 p-5 sm:p-6">
-            {status && <Notice tone={status.tone}>{status.text}</Notice>}
-            <TextField label="Community name" value={name} onChange={(e) => setName(e.target.value)} error={errors.name} maxLength={80} />
-            <TextArea label="Description" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={1000} />
-            <div className="flex justify-end">
-              <Button type="submit" busy={busy}>
-                Save changes
-              </Button>
-            </div>
-          </form>
-        ) : (
-          <dl className="flex flex-col gap-4 p-5 sm:p-6">
-            <KeyValue label="Community name">{community.name}</KeyValue>
-            <KeyValue label="Description">{community.description || 'No description'}</KeyValue>
-            <p className="text-sm text-muted">Only the administrator can change these details.</p>
-          </dl>
-        )}
+        <dl className="flex flex-col gap-4 p-5 sm:p-6">
+          <KeyValue label="Community name">{community.name}</KeyValue>
+          <KeyValue label="Description">{community.description || 'No description'}</KeyValue>
+          {membership.isAdmin && community.joinCode && <KeyValue label="Member join code"><span className="font-mono font-bold">{community.joinCode}</span></KeyValue>}
+          <p className="text-sm text-muted">Community detail editing is not available in the current server API.</p>
+        </dl>
       </Panel>
 
       <Panel title="Multisig configuration">

@@ -1,5 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { ApiError, errorMessage } from '../api/errors'
 import { Icon, Logo } from '../components/Icon'
 import { PrototypeBanner } from '../components/PrototypeBanner'
@@ -8,22 +8,38 @@ import { useSession } from '../context/SessionContext'
 
 function AuthShell({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
   return (
-    <div className="flex min-h-dvh flex-col bg-surface">
+    <div className="flex min-h-dvh flex-col bg-paper">
       <PrototypeBanner />
-      <div className="flex flex-1">
-        <div
-          className="hidden w-40 shrink-0 bg-cover bg-center md:block lg:w-72"
-          style={{ backgroundImage: `url(${import.meta.env.BASE_URL}hero.jpg)` }}
-          aria-hidden="true"
-        />
-        <main className="flex flex-1 justify-center px-5 py-10 sm:px-10 md:justify-start md:pl-16 lg:pl-28">
-          <div className="w-full max-w-md">
-            <Link to="/" className="inline-flex flex-col items-center gap-2">
-              <Logo size={52} />
-              <span className="text-2xl font-extrabold text-night">CommunitySafe</span>
+      <div className="grid flex-1 md:grid-cols-2">
+        <section className="relative overflow-hidden bg-forest px-5 py-6 text-white sm:px-10 md:flex md:min-h-full md:items-center md:px-12 lg:px-20" aria-label="About CommunitySafe">
+          <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full border border-white/10" aria-hidden="true" />
+          <div className="absolute -bottom-32 -left-20 h-80 w-80 rounded-full bg-forest-2" aria-hidden="true" />
+          <div className="relative mx-auto w-full max-w-xl">
+            <Link to="/" className="inline-flex items-center gap-3 rounded-lg focus-visible:outline-white">
+              <span className="rounded-lg bg-white p-2"><Logo size={30} /></span>
+              <span className="text-xl font-extrabold sm:text-2xl">CommunitySafe</span>
             </Link>
-            <h1 className="mt-12 text-3xl font-extrabold">{title}</h1>
-            <p className="mt-1.5 text-[16px] text-ink-soft">{subtitle}</p>
+            <div className="mt-7 hidden md:block lg:mt-16">
+              <p className="text-sm font-bold uppercase tracking-[0.18em] text-teal-line">Shared control, clear accountability</p>
+              <h2 className="mt-4 max-w-lg text-4xl font-extrabold leading-[1.12] lg:text-5xl">
+                Community funds, protected together.
+              </h2>
+              <p className="mt-5 max-w-md text-lg leading-relaxed text-white/80">
+                Coordinate contributions and payments with a shared Bitcoin wallet where every approval is visible and no single person controls the funds.
+              </p>
+              <ul className="mt-10 grid max-w-md gap-4 text-[15px] text-white/85">
+                <li className="flex items-center gap-3"><Icon name="users" size={20} /> Shared oversight for every member</li>
+                <li className="flex items-center gap-3"><Icon name="rule" size={20} /> Multiple approvals before funds move</li>
+                <li className="flex items-center gap-3"><Icon name="audit" size={20} /> Clear transaction history</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+        <main className="flex items-center justify-center px-5 py-10 sm:px-10 md:px-12 lg:px-20">
+          <div className="w-full max-w-md rounded-2xl border border-line bg-surface p-6 shadow-sm sm:p-8 lg:p-10">
+            <p className="text-sm font-bold uppercase tracking-[0.16em] text-teal-ink">Secure community access</p>
+            <h1 className="mt-3 text-3xl font-extrabold leading-tight sm:text-4xl">{title}</h1>
+            <p className="mt-2 text-[16px] leading-relaxed text-ink-soft">{subtitle}</p>
             <div className="mt-8">{children}</div>
           </div>
         </main>
@@ -52,14 +68,8 @@ function PasswordField({ value, onChange, error, label = 'Password', autoComplet
   )
 }
 
-const DEMO_ACCOUNTS = [
-  { label: 'Administrator', who: 'Martha Ngendo', email: 'martha.ngendo@example.org' },
-  { label: 'Signer', who: 'Sharnie Essy', email: 'sharnie.essy@example.org' },
-  { label: 'Member', who: 'Linder Stacy', email: 'linder.stacy@example.org' },
-]
-
 export function Login() {
-  const { login } = useSession()
+  const { user, login } = useSession()
   const navigate = useNavigate()
   const location = useLocation()
   const from = (location.state as { from?: string } | null)?.from ?? '/app'
@@ -90,6 +100,8 @@ export function Login() {
     if (Object.keys(next).length === 0) void signIn(email, password, 'form')
   }
 
+  if (user) return <Navigate to={from} replace />
+
   return (
     <AuthShell title="Welcome back" subtitle="Log in to your account">
       <form onSubmit={submit} noValidate className="flex flex-col gap-5">
@@ -101,22 +113,9 @@ export function Login() {
         </Button>
       </form>
 
-      <div className="mt-8 border border-line bg-paper p-5">
-        <p className="text-sm font-bold">Demo accounts</p>
-        <p className="mt-1 text-sm text-muted">Any email and password work in this prototype. Unknown emails sign in as the administrator. Or pick a role:</p>
-        <div className="mt-4 grid gap-2 sm:grid-cols-3">
-          {DEMO_ACCOUNTS.map((a) => (
-            <Button key={a.email} variant="secondary" size="sm" busy={busy === a.email} disabled={!!busy} onClick={() => void signIn(a.email, 'demo', a.email)} className="h-auto flex-col items-start gap-0 py-2 text-left">
-              <span>{a.label}</span>
-              <span className="text-xs font-normal text-muted">{a.who}</span>
-            </Button>
-          ))}
-        </div>
-      </div>
-
       <p className="mt-8 text-[15px]">
         Don’t have an account?{' '}
-        <Link to="/signup" className="font-semibold text-accent-ink underline underline-offset-4">
+        <Link to="/signup" className="font-semibold text-teal-ink underline underline-offset-4">
           Create one
         </Link>
       </p>
@@ -125,7 +124,7 @@ export function Login() {
 }
 
 export function Signup() {
-  const { register } = useSession()
+  const { user, register } = useSession()
   const navigate = useNavigate()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -138,7 +137,7 @@ export function Signup() {
   const submit = async (ev: FormEvent) => {
     ev.preventDefault()
     const next: Record<string, string> = {}
-    if (name.trim().length < 2) next.name = 'Enter your full name so other members recognise you.'
+    if (name.trim().split(/\s+/).length < 2) next.name = 'Enter your first and last name so other members recognise you.'
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) next.email = 'Enter a valid email address, like name@example.org.'
     if (password.length < 8) next.password = 'Use at least 8 characters.'
     if (confirm !== password) next.confirm = 'The two passwords do not match.'
@@ -155,6 +154,8 @@ export function Signup() {
       setBusy(false)
     }
   }
+
+  if (user) return <Navigate to="/app" replace />
 
   return (
     <AuthShell title="Create your account" subtitle="Then set up your community’s shared wallet.">
@@ -173,7 +174,7 @@ export function Signup() {
       </form>
       <p className="mt-8 text-[15px]">
         Already have an account?{' '}
-        <Link to="/login" className="font-semibold text-accent-ink underline underline-offset-4">
+        <Link to="/login" className="font-semibold text-teal-ink underline underline-offset-4">
           Log in
         </Link>
       </p>

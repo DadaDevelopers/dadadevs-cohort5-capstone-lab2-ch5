@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node src/server.js",
-    "test": "node --test"
+    "test": "node scripts/run-tests.js",
+    "regtest:signer": "node scripts/regtest-signer.js"
   },
   "repository": {
     "type": "git",
@@ -24,13 +25,15 @@
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
     "bcryptjs": "^3.0.3",
+    "bitcoinjs-lib": "^7.0.4",
     "cors": "^2.8.6",
     "dotenv": "^18.0.5",
     "express": "^5.2.1",
     "express-rate-limit": "^8.7.0",
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.23.1",
-    "swagger-ui-express": "^5.0.1"
+    "swagger-ui-express": "^5.0.1",
+    "tiny-secp256k1": "^2.2.4"
   },
   "devDependencies": {
     "prisma": "^7.10.0"

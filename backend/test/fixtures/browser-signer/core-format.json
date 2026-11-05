@@ -1,0 +1,39 @@
+{
+  "note": "Bitcoin Core walletcreatefundedpsbt format (nonWitnessUtxo + witnessUtxo + bip32 derivations) for a wsh(sortedmulti(2-of-3)) Regtest wallet, signed by frontend/src/lib/browser-signer signSigningPsbt; never use these BIP39 test words on a real network.",
+  "unsigned": "cHNidP8BAFICAAAAAVbtNoEBogK/wZkxWl45RH4Xgiu/ajzfEOZKIGKEz8pjAAAAAAD9////AZBfAQAAAAAAFgAUD8oFQQHLqMCb6sAQbdqPVWR/D+MAAAAAAAEAiQIAAAABoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKAAAAAAAP////8CeGMBAAAAAAAiACAceip4JvnF4GmlB5j07z0N+OzET0XZaQ609i9WAdtdu+gDAAAAAAAAIgAgHHoqeCb5xeBppQeY9O89DfjsxE9F2WkOtPYvVgHbXbsAAAAAAQEreGMBAAAAAAAiACAceip4JvnF4GmlB5j07z0N+OzET0XZaQ609i9WAdtduwEFaVIhAwuQ7S6GutfypP6XabtBfXupyqESSAfb+zYt++62Xn4BIQM9aTvRo+zhOfYqtSoo40wGnI1o8YeIyl9bL/nYAHMO8iEDqpO2pw7SFlivL6/Mc0TMxb/wcDzYcr2dnwaCXgLyFFxTriIGAwuQ7S6GutfypP6XabtBfXupyqESSAfb+zYt++62Xn4BHHPF2gowAACAAQAAgAAAAIACAACAAAAAAAAAAAAiBgM9aTvRo+zhOfYqtSoo40wGnI1o8YeIyl9bL/nYAHMO8hwoZFAGMAAAgAEAAIAAAACAAgAAgAAAAAAAAAAAIgYDqpO2pw7SFlivL6/Mc0TMxb/wcDzYcr2dnwaCXgLyFFwcuGiN8TAAAIABAACAAAAAgAIAAIAAAAAAAAAAAAAA",
+  "signedA": "cHNidP8BAFICAAAAAVbtNoEBogK/wZkxWl45RH4Xgiu/ajzfEOZKIGKEz8pjAAAAAAD9////AZBfAQAAAAAAFgAUD8oFQQHLqMCb6sAQbdqPVWR/D+MAAAAAAAEAiQIAAAABoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKAAAAAAAP////8CeGMBAAAAAAAiACAceip4JvnF4GmlB5j07z0N+OzET0XZaQ609i9WAdtdu+gDAAAAAAAAIgAgHHoqeCb5xeBppQeY9O89DfjsxE9F2WkOtPYvVgHbXbsAAAAAAQEreGMBAAAAAAAiACAceip4JvnF4GmlB5j07z0N+OzET0XZaQ609i9WAdtduyICAwuQ7S6GutfypP6XabtBfXupyqESSAfb+zYt++62Xn4BRzBEAiBiATJCer9w5TV0gxjsydfRb+SOwcHf6/3+1MprJgJCjAIgCTzv1K3BJXXQJ7UuORQ30xXSNY9yOa3pncf9Cs+zAwwBAQVpUiEDC5DtLoa61/Kk/pdpu0F9e6nKoRJIB9v7Ni377rZefgEhAz1pO9Gj7OE59iq1KijjTAacjWjxh4jKX1sv+dgAcw7yIQOqk7anDtIWWK8vr8xzRMzFv/BwPNhyvZ2fBoJeAvIUXFOuIgYDC5DtLoa61/Kk/pdpu0F9e6nKoRJIB9v7Ni377rZefgEcc8XaCjAAAIABAACAAAAAgAIAAIAAAAAAAAAAACIGAz1pO9Gj7OE59iq1KijjTAacjWjxh4jKX1sv+dgAcw7yHChkUAYwAACAAQAAgAAAAIACAACAAAAAAAAAAAAiBgOqk7anDtIWWK8vr8xzRMzFv/BwPNhyvZ2fBoJeAvIUXBy4aI3xMAAAgAEAAIAAAACAAgAAgAAAAAAAAAAAAAA=",
+  "signedAB": "cHNidP8BAFICAAAAAVbtNoEBogK/wZkxWl45RH4Xgiu/ajzfEOZKIGKEz8pjAAAAAAD9////AZBfAQAAAAAAFgAUD8oFQQHLqMCb6sAQbdqPVWR/D+MAAAAAAAEAiQIAAAABoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKAAAAAAAP////8CeGMBAAAAAAAiACAceip4JvnF4GmlB5j07z0N+OzET0XZaQ609i9WAdtdu+gDAAAAAAAAIgAgHHoqeCb5xeBppQeY9O89DfjsxE9F2WkOtPYvVgHbXbsAAAAAAQEreGMBAAAAAAAiACAceip4JvnF4GmlB5j07z0N+OzET0XZaQ609i9WAdtduyICAwuQ7S6GutfypP6XabtBfXupyqESSAfb+zYt++62Xn4BRzBEAiBiATJCer9w5TV0gxjsydfRb+SOwcHf6/3+1MprJgJCjAIgCTzv1K3BJXXQJ7UuORQ30xXSNY9yOa3pncf9Cs+zAwwBIgIDPWk70aPs4Tn2KrUqKONMBpyNaPGHiMpfWy/52ABzDvJIMEUCIQDo7bPSM+3hXL9jj/KAlJsfzpcvaxIEDGo6egSF+drQ4wIgcMDfXnMRkqTEXeeGZxmONcPe5UzAs7whk67p6cbMB5UBAQVpUiEDC5DtLoa61/Kk/pdpu0F9e6nKoRJIB9v7Ni377rZefgEhAz1pO9Gj7OE59iq1KijjTAacjWjxh4jKX1sv+dgAcw7yIQOqk7anDtIWWK8vr8xzRMzFv/BwPNhyvZ2fBoJeAvIUXFOuIgYDC5DtLoa61/Kk/pdpu0F9e6nKoRJIB9v7Ni377rZefgEcc8XaCjAAAIABAACAAAAAgAIAAIAAAAAAAAAAACIGAz1pO9Gj7OE59iq1KijjTAacjWjxh4jKX1sv+dgAcw7yHChkUAYwAACAAQAAgAAAAIACAACAAAAAAAAAAAAiBgOqk7anDtIWWK8vr8xzRMzFv/BwPNhyvZ2fBoJeAvIUXBy4aI3xMAAAgAEAAIAAAACAAgAAgAAAAAAAAAAAAAA=",
+  "threshold": 2,
+  "publicKeys": [
+    "030b90ed2e86bad7f2a4fe9769bb417d7ba9caa1124807dbfb362dfbeeb65e7e01",
+    "033d693bd1a3ece139f62ab52a28e34c069c8d68f18788ca5f5b2ff9d800730ef2",
+    "03aa93b6a70ed21658af2fafcc7344ccc5bff0703cd872bd9d9f06825e02f2145c"
+  ],
+  "signerKeys": [
+    "030b90ed2e86bad7f2a4fe9769bb417d7ba9caa1124807dbfb362dfbeeb65e7e01",
+    "033d693bd1a3ece139f62ab52a28e34c069c8d68f18788ca5f5b2ff9d800730ef2"
+  ],
+  "uninvolvedKey": "03aa93b6a70ed21658af2fafcc7344ccc5bff0703cd872bd9d9f06825e02f2145c",
+  "address": "bcrt1qr3az57pxl8z7q6d9q7v0fmeaphuwe3z0ghvkjr457ch4vqwmtkask29wwr",
+  "descriptor": "wsh(sortedmulti(2,030b90ed2e86bad7f2a4fe9769bb417d7ba9caa1124807dbfb362dfbeeb65e7e01,033d693bd1a3ece139f62ab52a28e34c069c8d68f18788ca5f5b2ff9d800730ef2,03aa93b6a70ed21658af2fafcc7344ccc5bff0703cd872bd9d9f06825e02f2145c))",
+  "recipientAddress": "bcrt1qpl9q2sgpew5vpxl2cqgxmk5024j87rlrxvl96y",
+  "amountSats": "90000",
+  "feeSats": "1000",
+  "bip32Derivations": [
+    {
+      "master_fingerprint": "73c5da0a",
+      "path": "m/48'/1'/0'/2'/0/0",
+      "pubkey": "030b90ed2e86bad7f2a4fe9769bb417d7ba9caa1124807dbfb362dfbeeb65e7e01"
+    },
+    {
+      "master_fingerprint": "28645006",
+      "path": "m/48'/1'/0'/2'/0/0",
+      "pubkey": "033d693bd1a3ece139f62ab52a28e34c069c8d68f18788ca5f5b2ff9d800730ef2"
+    },
+    {
+      "master_fingerprint": "b8688df1",
+      "path": "m/48'/1'/0'/2'/0/0",
+      "pubkey": "03aa93b6a70ed21658af2fafcc7344ccc5bff0703cd872bd9d9f06825e02f2145c"
+    }
+  ]
+}

@@ -3,6 +3,8 @@ import { Icon, Logo } from '../components/Icon'
 import { PrototypeBanner } from '../components/PrototypeBanner'
 import { SignerSlotsMini } from '../components/SignerSlots'
 import { ButtonLink } from '../components/ui'
+import { useCommunity } from '../context/CommunityContext'
+import { useSession } from '../context/SessionContext'
 
 // HashRouter owns the URL hash, so in-page links scroll with JavaScript instead of #anchors.
 function scrollTo(id: string) {
@@ -10,23 +12,23 @@ function scrollTo(id: string) {
 }
 
 const STEPS = [
-  { title: 'Create the community', body: 'The person setting it up becomes the administrator. They manage the member list, nothing more.' },
+  { title: 'Create the community', body: 'The person setting it up becomes the administrator. They manage membership, wallet setup, payment requests, and broadcasting.' },
   { title: 'Choose the signers', body: 'Pick the trusted members who will approve spending. Being a member does not make you a signer.' },
   { title: 'Agree the approval rule', body: 'For example, 3 of 5 signers must approve. At least two people are always needed.' },
   { title: 'Receive contributions', body: 'Everyone sends to one shared address. Every member can see the balance and each deposit.' },
-  { title: 'Spend only with approval', body: 'A signer proposes a payment. It leaves the wallet only after enough signers have signed it on their own devices.' },
+  { title: 'Spend only with approval', body: 'An administrator creates a payment request. It leaves the wallet only after enough signers have signed it on their own devices.' },
 ]
 
 const ROLES = [
   {
     role: 'Administrator',
-    can: 'Create the community, add members, choose the signers and set the first approval rule.',
-    cannot: 'Spend, or skip the approval rule. If the admin is also a signer, their signature counts once like anyone else’s.',
+    can: 'Create the community, manage members and setup, create payment requests, and broadcast fully signed payments.',
+    cannot: 'Skip the approval rule. If the admin is also a signer, their signature counts once like anyone else’s.',
   },
   {
     role: 'Authorised signer',
-    can: 'Propose spending, review the full details, sign or decline, and send a payment once enough people have signed.',
-    cannot: 'Spend alone. Change a request after someone has signed it.',
+    can: 'Review the full transaction, export the PSBT, sign independently, and submit the genuinely signed PSBT.',
+    cannot: 'Create or broadcast a payment unless they are also an administrator. Sign for another person.',
   },
   {
     role: 'Member',
@@ -36,6 +38,17 @@ const ROLES = [
 ]
 
 export default function Landing() {
+  const { user } = useSession()
+  const { community, ready } = useCommunity()
+  const signedInAction = !ready
+    ? { to: '/app', label: 'Open Dashboard' }
+    : !community
+      ? { to: '/start', label: 'Create community' }
+      : community.setupStage === 'active'
+        ? { to: '/app', label: 'Open Dashboard' }
+        : { to: `/setup/${community.setupStage}`, label: 'Continue setup' }
+  const primaryAction = user ? signedInAction : { to: '/signup', label: 'Get started' }
+
   return (
     <div className="min-h-dvh bg-paper">
       <PrototypeBanner />
@@ -48,7 +61,7 @@ export default function Landing() {
           aria-label="Rooftops of a Nairobi neighbourhood"
         />
         <header className="relative flex items-center gap-6 px-5 py-5 sm:px-10">
-          <Link to="/" className="flex items-center gap-2.5">
+          <Link to="/" aria-label="CommunitySafe home" className="flex items-center gap-2.5">
             <Logo size={30} />
             <span className="text-lg font-bold">Community Safe</span>
           </Link>
@@ -56,9 +69,9 @@ export default function Landing() {
             <button type="button" onClick={() => scrollTo('problem')} className="hover:text-accent">Why</button>
             <button type="button" onClick={() => scrollTo('how')} className="hover:text-accent">How it works</button>
             <button type="button" onClick={() => scrollTo('roles')} className="hover:text-accent">Roles</button>
-            <Link to="/login" className="hover:text-accent">Log in</Link>
+            {user ? <Link to={primaryAction.to} className="hover:text-accent">{primaryAction.label}</Link> : <Link to="/login" className="hover:text-accent">Log in</Link>}
           </nav>
-          <ButtonLink to="/signup" className="ml-auto md:ml-0">Get started</ButtonLink>
+          <ButtonLink to={primaryAction.to} className="ml-auto md:ml-0">{primaryAction.label}</ButtonLink>
         </header>
 
         <div className="relative px-5 pb-20 pt-14 sm:px-10 md:w-[58%] md:pb-32 md:pt-28">
@@ -71,17 +84,19 @@ export default function Landing() {
             A Bitcoin multisignature wallet for communities, organisations and groups. No single person can move the funds.
           </p>
           <div className="mt-10 flex flex-wrap gap-4">
-            <ButtonLink to="/signup" size="lg">Create community</ButtonLink>
+            <ButtonLink to={primaryAction.to} size="lg">{user ? primaryAction.label : 'Create community'}</ButtonLink>
             <button type="button" onClick={() => scrollTo('how')} className="inline-flex h-14 items-center border border-white/60 px-7 font-semibold hover:bg-white/10">
               Learn more
             </button>
           </div>
-          <p className="mt-8 text-sm text-white/60">
-            Want to look around first?{' '}
-            <Link to="/login" className="font-semibold text-white underline underline-offset-4">
-              Log in with the demo community
-            </Link>
-          </p>
+          {user ? (
+            <p className="mt-8 text-sm text-white/60">Signed in as <span className="font-semibold text-white">{user.name}</span>. Your workspace remains available while you explore.</p>
+          ) : (
+            <p className="mt-8 text-sm text-white/60">
+              Already have an account?{' '}
+              <Link to="/login" className="font-semibold text-white underline underline-offset-4">Log in</Link>
+            </p>
+          )}
         </div>
       </section>
 
@@ -174,11 +189,11 @@ export default function Landing() {
         <div className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-14 sm:px-10 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-2xl font-extrabold">Try it with a test community.</p>
-            <p className="mt-2 text-white/70">This prototype runs on mock data and a simulated regtest network. Nothing here is real money.</p>
+            <p className="mt-2 text-white/70">Connected communities use a real backend and Bitcoin Core Regtest. Regtest coins have no monetary value.</p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <ButtonLink to="/signup" size="lg">Create community</ButtonLink>
-            <ButtonLink to="/login" size="lg" variant="inverse">Log in</ButtonLink>
+            <ButtonLink to={primaryAction.to} size="lg">{user ? primaryAction.label : 'Create community'}</ButtonLink>
+            {!user && <ButtonLink to="/login" size="lg" variant="inverse">Log in</ButtonLink>}
           </div>
         </div>
       </footer>

@@ -8,7 +8,7 @@ process.env.JWT_SECRET = "test-access-secret";
 process.env.JWT_EXPIRES_IN = "1h";
 process.env.REFRESH_TOKEN_SECRET = "test-refresh-secret";
 process.env.REFRESH_TOKEN_EXPIRES_IN = "7d";
-process.env.NODE_ENV = "development";
+process.env.NODE_ENV = "test";
 
 let user;
 const resetTokens = [];
@@ -101,16 +101,20 @@ test("authentication, authorization, reset, rate limits and docs", async () => {
     result = await request("/auth/refresh", "POST", { refreshToken });
     assert.equal(result.status, 200);
     assert.ok(result.body.token);
-    let resetToken;
+    const resetToken = "a".repeat(64);
     const originalLog = console.log;
-    console.log = (message) => { resetToken = message.split(": ")[1]; };
+    const originalRandomBytes = crypto.randomBytes;
+    const logs = [];
+    crypto.randomBytes = () => Buffer.from(resetToken, "hex");
+    console.log = (...values) => logs.push(values);
     try {
       result = await request("/auth/forgot-password", "POST", { email: "ada@example.com" });
       assert.equal(result.status, 200);
     } finally {
       console.log = originalLog;
+      crypto.randomBytes = originalRandomBytes;
     }
-    assert.ok(resetToken);
+    assert.deepEqual(logs, []);
     const unknown = await request("/auth/forgot-password", "POST", { email: "nobody@example.com" });
     assert.deepEqual(unknown.body, result.body);
     result = await request("/auth/reset-password", "POST", { token: resetToken, newPassword: "newpassword123" });
@@ -137,16 +141,18 @@ test("authentication, authorization, reset, rate limits and docs", async () => {
     });
     assert.equal(preflight.status, 204);
     assert.match(preflight.headers.get("access-control-allow-headers"), /Authorization/);
+    assert.match(corsResponse.headers.get("access-control-expose-headers"), /Retry-After/);
 
     for (let i = 0; i < 5; i += 1) {
       assert.equal((await request("/auth/login", "POST", { email: "locked@example.com", password: "wrong" })).status, 401);
     }
-    assert.equal((await request("/auth/login", "POST", { email: "locked@example.com", password: "wrong" })).status, 429);
-    let rateLimited = false;
-    for (let i = 0; i < 35; i += 1) {
-      if ((await request("/auth/me")).status === 429) rateLimited = true;
+    const locked = await request("/auth/login", "POST", { email: "locked@example.com", password: "wrong" });
+    assert.equal(locked.status, 429);
+    assert.ok(Number(locked.headers.get("retry-after")) > 0);
+    // Routine session reads no longer share the small public-auth bucket.
+    for (let i = 0; i < 40; i += 1) {
+      assert.notEqual((await request("/auth/me", "GET", undefined, { Authorization: `Bearer ${token}` })).status, 429);
     }
-    assert.equal(rateLimited, true);
   } finally {
     server.close();
   }

@@ -2,8 +2,8 @@
 
 The React web frontend for CommunitySafe, a Bitcoin multisignature wallet coordination platform for communities that pool money: chamas, savings groups, NGOs, student organisations and small teams. Several trusted members each hold a key, and the group agrees how many of them must sign before anything is spent (for example, 3 of 5). Every member can see the balance, each contribution, each spending request and who signed it.
 
-> **All data is mocked. Nothing is wired to the backend yet.**
-> The frontend runs entirely on an in-memory mock in `src/mock/` that simulates a regtest Bitcoin network. It makes no network calls to `backend/`. No real Bitcoin is involved, nothing is saved between page reloads, and the app never asks for or stores a private key or recovery phrase.
+> **Status: wired to the Express backend.** The API layer in `src/api/` calls the real `/auth` and `/communities` endpoints; `src/mock/` is no longer imported by any screen.
+> Set `VITE_API_BASE_URL` when the API is not served from the same origin as the frontend. The later "Trying it out", project-structure, and API-contract sections describe the original mock build and are kept as history; the implemented contract and its verification are recorded in `INTEGRATION_PLAN.md` and `INTEGRATION_TEST_REPORT.md` at the repository root.
 
 ## Running locally
 
@@ -16,6 +16,20 @@ npm run dev        # http://localhost:5173/
 npm run build      # type-checks, then builds to frontend/dist
 npm run preview    # serves the production build
 ```
+
+## Experimental in-browser signer (optional, Regtest only)
+
+By default the frontend keeps the manual flow: export the coordinator PSBT, sign it in an independent Bitcoin Core wallet, and paste the signed PSBT back. A signer can also create or restore a secp256k1 key in the browser instead:
+
+```bash
+# frontend/.env.local
+VITE_ENABLE_BROWSER_SIGNER=true
+```
+
+- Any value other than `true` (including unset) leaves both browser-signer panels unmounted.
+- Only compressed public keys are sent to the backend. Recovery words are encrypted with a passphrase (PBKDF2-SHA256 + AES-256-GCM) and kept in IndexedDB, and the private key exists in memory only for the duration of one signature.
+- The panel re-derives the wallet from the backend descriptor and checks the previous outputs, witness script, recipient, amount, fee, change, and SIGHASH_ALL before asking for the passphrase.
+- This is a Regtest experiment. It requires `crypto.subtle` (a secure context: `localhost` or HTTPS) and IndexedDB, and it is not intended for signet or mainnet.
 
 ## Trying it out
 

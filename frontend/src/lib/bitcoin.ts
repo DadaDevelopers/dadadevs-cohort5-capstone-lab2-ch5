@@ -98,19 +98,19 @@ export function validateRecipientAddress(raw: string, ownAddress?: string | null
   if (!address) return "Enter the recipient's Bitcoin address."
   const lower = address.toLowerCase()
   if (lower.startsWith('bc1') || /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(address)) {
-    return 'This is a mainnet address for real Bitcoin. This prototype only works on test networks, so use an address that starts with bcrt1 (regtest) or tb1 (signet).'
+    return 'This is a mainnet address for real Bitcoin. CommunitySafe currently works only on Regtest, so use an address that starts with bcrt1.'
   }
   if (/^[mn2][a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(address)) {
-    return 'This is an older style test address. Ask the recipient for a SegWit address that starts with bcrt1 or tb1.'
+    return 'This is an older style test address. Ask the recipient for a Regtest SegWit address that starts with bcrt1.'
   }
-  if (!TEST_NETWORK_PREFIXES.some((p) => lower.startsWith(p))) {
-    return 'This does not look like a Bitcoin test-network address. It should start with bcrt1 (regtest) or tb1 (signet).'
+  if (!lower.startsWith('bcrt1')) {
+    return 'This does not look like a Regtest address. It should start with bcrt1.'
   }
   const decoded = decodeSegwitAddress(address)
   if (decoded === 'bad-checksum') {
     return 'This address has a typo somewhere: its built-in checksum does not match. Copy it again from the recipient instead of typing it.'
   }
-  if (!decoded || (decoded.hrp !== 'bcrt' && decoded.hrp !== 'tb')) {
+  if (!decoded || decoded.hrp !== 'bcrt') {
     return 'This address is not complete or has characters that are not allowed. Copy it again from the recipient.'
   }
   if (ownAddress && lower === ownAddress.toLowerCase()) {
